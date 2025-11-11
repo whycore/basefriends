@@ -93,7 +93,17 @@ export default function SwipePage() {
   }
 
   if (!current) {
-    return <div className="p-6">No more profiles. Please check back later.</div>;
+    return (
+      <div className="p-6 max-w-md mx-auto">
+        <div>No more profiles. Please check back later.</div>
+        <a
+          href="/onboarding"
+          className="inline-block mt-4 px-4 py-3 rounded-xl border border-blue-300 text-blue-700"
+        >
+          Update preferences
+        </a>
+      </div>
+    );
   }
 
   return (
