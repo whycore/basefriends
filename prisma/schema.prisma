@@ -1,0 +1,52 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  fid            Int      @id
+  username       String? 
+  displayName    String?
+  pfpUrl         String?
+  followerCount  Int?     
+  followingCount Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  extra          UserExtra?
+}
+
+model UserExtra {
+  fid         Int    @id
+  headline    String?
+  interests   String?
+  skills      String?
+  availability String?
+  lastSeen    DateTime? 
+  user        User  @relation(fields: [fid], references: [fid])
+}
+
+model Swipe {
+  id        String   @id @default(cuid())
+  fromFid   Int
+  toFid     Int
+  action    String   // 'follow' | 'skip'
+  createdAt DateTime @default(now())
+  @@index([fromFid, toFid])
+}
+
+model FollowCached {
+  id           String   @id @default(cuid())
+  fromFid      Int
+  toFid        Int
+  status       String?  // e.g., 'followed', 'attempted', 'failed'
+  lastCheckedAt DateTime?
+  @@index([fromFid, toFid])
+}
