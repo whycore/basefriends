@@ -21,10 +21,19 @@ export default function SwipePage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [hasFarcaster, setHasFarcaster] = useState<boolean>(false);
   const [devBypass, setDevBypass] = useState<boolean>(false);
+  const [siwnConnected, setSiwnConnected] = useState<boolean>(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setDevBypass(params.get("dev") === "1");
+    if (params.get("siwn") === "1") {
+      try {
+        localStorage.setItem("siwn_connected", "1");
+      } catch {}
+    }
+    try {
+      setSiwnConnected(localStorage.getItem("siwn_connected") === "1");
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -69,6 +78,19 @@ export default function SwipePage() {
       /iphone|ipad|ipod|android|mobile/i.test(navigator.userAgent);
 
     if (action === "follow") {
+      // If SIWN connected, attempt server-side follow first
+      if (siwnConnected) {
+        try {
+          const res = await fetch("/api/follow", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ toFid: current.fid }),
+          });
+          const ok = res.ok;
+          if (ok) return; // success, nothing else to do
+        } catch {}
+      }
+
       // Try native profile view if inside Base App / supported clients
       try {
         if (sdk && sdk.actions && typeof (sdk as any).actions.viewProfile === "function") {
@@ -172,6 +194,16 @@ export default function SwipePage() {
     <div className="flex items-center justify-center min-h-[70vh] p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-md border border-blue-100">
         <div className="p-6">
+          <div className="flex justify-end">
+            {!siwnConnected && (
+              <a
+                href="/auth/neynar/start"
+                className="text-xs px-3 py-1.5 rounded-lg border border-blue-300 text-blue-700"
+              >
+                Connect Farcaster
+              </a>
+            )}
+          </div>
           <div className="flex items-center gap-4">
             {current.pfpUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
