@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-// import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,16 +8,19 @@ export async function POST(req: NextRequest) {
     const interests = typeof body?.interests === "string" ? body.interests : "";
     const skills = typeof body?.skills === "string" ? body.skills : "";
 
-    // In serverless staging, avoid writing to SQLite (read-only). For production, use Postgres and enable DB write.
-    // try {
-    //   await prisma.userExtra.upsert({
-    //     create: { fid: 0, headline, interests, skills },
-    //     update: { headline, interests, skills },
-    //     where: { fid: 0 },
-    //   });
-    // } catch (e) {
-    //   console.warn("Skipping onboarding DB write in serverless environment:", e);
-    // }
+    const dbUrl = process.env.DATABASE_URL || "";
+    const isPostgres = dbUrl.startsWith("postgres://") || dbUrl.startsWith("postgresql://");
+    if (isPostgres) {
+      try {
+        await prisma.userExtra.upsert({
+          create: { fid: 0, headline, interests, skills },
+          update: { headline, interests, skills },
+          where: { fid: 0 },
+        });
+      } catch (e) {
+        console.warn("DB write failed:", e);
+      }
+    }
 
     return NextResponse.json({ ok: true });
   } catch (error) {

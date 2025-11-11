@@ -22,6 +22,9 @@ export default function SwipePage() {
   const [hasFarcaster, setHasFarcaster] = useState<boolean>(false);
   const [devBypass, setDevBypass] = useState<boolean>(false);
   const [siwnConnected, setSiwnConnected] = useState<boolean>(false);
+  const enableSiwn =
+    typeof process !== "undefined" &&
+    (process.env.NEXT_PUBLIC_ENABLE_SIWN || "").toLowerCase() === "true";
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -195,7 +198,7 @@ export default function SwipePage() {
       <div className="w-full max-w-md bg-white rounded-2xl shadow-md border border-blue-100">
         <div className="p-6">
           <div className="flex justify-end">
-            {!siwnConnected && (
+            {!siwnConnected && enableSiwn && (
               <a
                 href="/auth/neynar/start"
                 className="text-xs px-3 py-1.5 rounded-lg border border-blue-300 text-blue-700"
