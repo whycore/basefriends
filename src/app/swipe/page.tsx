@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
 import { getFarcasterContext } from "@/lib/farcaster";
+import { sdk } from "@farcaster/miniapp-sdk";
 
 type Candidate = {
   fid: number;
@@ -60,24 +61,78 @@ export default function SwipePage() {
   const handleAction = async (action: "follow" | "skip") => {
     if (!current) return;
     setCandidates((prev) => prev.slice(1));
+
+    // Precompute deeplink to keep user-gesture context and avoid blockers on mobile.
+    const deeplink = `https://warpcast.com/~/profiles/${current.fid}`;
+    const isMobile =
+      typeof navigator !== "undefined" &&
+      /iphone|ipad|ipod|android|mobile/i.test(navigator.userAgent);
+
+    if (action === "follow") {
+      // Try native profile view if inside Base App / supported clients
+      try {
+        // @ts-expect-error: optional chaining for safety
+        if (sdk?.actions?.viewProfile) {
+          // Fire-and-forget POST in background
+          try {
+            if ("sendBeacon" in navigator) {
+              const blob = new Blob(
+                [JSON.stringify({ toFid: current.fid, action })],
+                { type: "application/json" },
+              );
+              // @ts-ignore
+              navigator.sendBeacon("/api/swipe", blob);
+            } else {
+              fetch("/api/swipe", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ toFid: current.fid, action }),
+                keepalive: true,
+              }).catch(() => {});
+            }
+          } catch {}
+          await sdk.actions.viewProfile({ fid: current.fid });
+          return;
+        }
+      } catch {
+        // fall through to web deeplink
+      }
+
+      // Open Warpcast profile immediately to preserve user gesture
+      if (isMobile) {
+        window.location.assign(deeplink);
+      } else {
+        window.open(deeplink, "_blank", "noopener,noreferrer");
+      }
+
+      // Fire-and-forget POST after navigation attempt
+      try {
+        if ("sendBeacon" in navigator) {
+          const blob = new Blob(
+            [JSON.stringify({ toFid: current.fid, action })],
+            { type: "application/json" },
+          );
+          // @ts-ignore
+          navigator.sendBeacon("/api/swipe", blob);
+        } else {
+          fetch("/api/swipe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ toFid: current.fid, action }),
+            keepalive: true,
+          }).catch(() => {});
+        }
+      } catch {}
+      return;
+    }
+
+    // Skip path: simple POST
     try {
-      const res = await fetch("/api/swipe", {
+      await fetch("/api/swipe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ toFid: current.fid, action }),
       });
-      const json = await res.json().catch(() => ({}));
-      if (action === "follow" && json?.deeplink) {
-        const isMobile =
-          typeof navigator !== "undefined" &&
-          /iphone|ipad|ipod|android|mobile/i.test(navigator.userAgent);
-        // Mobile webviews often block window.open; prefer same-tab navigation.
-        if (isMobile) {
-          window.location.href = json.deeplink as string;
-        } else {
-          window.open(json.deeplink as string, "_blank", "noopener,noreferrer");
-        }
-      }
     } catch (e) {
       console.error(e);
     }
