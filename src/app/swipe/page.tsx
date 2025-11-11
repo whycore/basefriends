@@ -68,7 +68,15 @@ export default function SwipePage() {
       });
       const json = await res.json().catch(() => ({}));
       if (action === "follow" && json?.deeplink) {
-        window.open(json.deeplink, "_blank");
+        const isMobile =
+          typeof navigator !== "undefined" &&
+          /iphone|ipad|ipod|android|mobile/i.test(navigator.userAgent);
+        // Mobile webviews often block window.open; prefer same-tab navigation.
+        if (isMobile) {
+          window.location.href = json.deeplink as string;
+        } else {
+          window.open(json.deeplink as string, "_blank", "noopener,noreferrer");
+        }
       }
     } catch (e) {
       console.error(e);
