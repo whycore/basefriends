@@ -71,8 +71,7 @@ export default function SwipePage() {
     if (action === "follow") {
       // Try native profile view if inside Base App / supported clients
       try {
-        // @ts-expect-error: optional chaining for safety
-        if (sdk?.actions?.viewProfile) {
+        if (sdk && sdk.actions && typeof (sdk as any).actions.viewProfile === "function") {
           // Fire-and-forget POST in background
           try {
             if ("sendBeacon" in navigator) {
