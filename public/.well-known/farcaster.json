@@ -10,24 +10,24 @@
   "miniapp": {
     "version": "1",
     "name": "BaseFriends",
-    "homeUrl": "https://basefriends-staging.vercel.app",
-    "iconUrl": "https://basefriends-staging.vercel.app/icon.png",
-    "splashImageUrl": "https://basefriends-staging.vercel.app/splash.png",
+    "homeUrl": "https://basefriends.vercel.app",
+    "iconUrl": "https://basefriends.vercel.app/icon.png",
+    "splashImageUrl": "https://basefriends.vercel.app/splash.png",
     "splashBackgroundColor": "#0A7AFF",
     "primaryCategory": "social",
     "tags": ["networking", "base", "farcaster", "social", "builders"],
     "subtitle": "Discover and follow builders",
     "description": "Swipe to meet builders on Base. Follow or skip to grow your network.",
     "tagline": "Meet builders on Base",
-    "heroImageUrl": "https://basefriends-staging.vercel.app/hero.png",
+    "heroImageUrl": "https://basefriends.vercel.app/hero.png",
     "screenshotUrls": [
-      "https://basefriends-staging.vercel.app/screenshot1.png",
-      "https://basefriends-staging.vercel.app/screenshot2.png",
-      "https://basefriends-staging.vercel.app/screenshot3.png"
+      "https://basefriends.vercel.app/screenshot1.png",
+      "https://basefriends.vercel.app/screenshot2.png",
+      "https://basefriends.vercel.app/screenshot3.png"
     ],
     "ogTitle": "BaseFriends",
     "ogDescription": "Swipe to meet builders on Base",
-    "ogImageUrl": "https://basefriends-staging.vercel.app/og-image.png",
+    "ogImageUrl": "https://basefriends.vercel.app/og-image.png",
     "noindex": true
   }
 }
