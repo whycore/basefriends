@@ -199,8 +199,15 @@ export default function Home() {
               
               // Log error for debugging
               if (response.status === 404) {
-                console.log("[home] ⚠️ FID not found for this wallet address.");
-                console.log("[home] 💡 Suggestion: Make sure wallet is connected to Farcaster account, or use Farcaster context from Base App.");
+                // Check if it's endpoint not found vs FID not found
+                if (errorData.error && errorData.error === "FID not found for this address") {
+                  console.log("[home] ⚠️ FID not found for this wallet address.");
+                  console.log("[home] 💡 Suggestion: Make sure wallet is connected to Farcaster account, or use Farcaster context from Base App.");
+                } else {
+                  // Endpoint might not be deployed yet
+                  console.warn("[home] ⚠️ /api/lookup-fid endpoint returned 404.");
+                  console.warn("[home] 💡 This might mean the endpoint is not yet deployed. This is OK - you can still use the app via Farcaster context in Base App.");
+                }
               }
               
               if (isMounted) {
@@ -210,6 +217,11 @@ export default function Home() {
             }
           } catch (apiError: any) {
             console.error("[home] API lookup error:", apiError?.message || apiError);
+            // Network error or endpoint not available
+            if (apiError?.message?.includes("404") || apiError?.message?.includes("Failed to fetch")) {
+              console.warn("[home] ⚠️ /api/lookup-fid endpoint might not be available yet.");
+              console.warn("[home] 💡 This is OK - you can still use the app via Farcaster context in Base App.");
+            }
             if (isMounted) {
               clearTimeout(timeoutId);
               setRetryCount((prev) => prev + 1);
