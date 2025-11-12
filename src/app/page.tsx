@@ -19,33 +19,56 @@ export default function Home() {
     setDevBypass(params.get("dev") === "1");
   }, []);
 
-  const checkFid = useCallback(async () => {
+  const checkFid = useCallback(async (retryCount = 0) => {
     try {
+      console.log("[home] Checking FID (attempt", retryCount + 1, ")...");
+      
       // Initialize SDK first (calls ready() to hide splash screen)
       await initializeFarcasterSDK();
       
-      // Small delay to ensure SDK is ready
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Wait longer for Base App to provide context (may need more time)
+      const waitTime = retryCount === 0 ? 500 : 300;
+      await new Promise(resolve => setTimeout(resolve, waitTime));
       
       // Get Farcaster context
       const ctx = await getFarcasterContext();
       const detectedFid = ctx?.fid || 0;
       
-      setFid(detectedFid > 0 ? detectedFid : null);
-      setLoading(false);
+      console.log("[home] FID check result:", {
+        attempt: retryCount + 1,
+        fid: detectedFid,
+        hasContext: !!ctx,
+        username: ctx?.username,
+      });
       
-      console.log("[home] FID detected:", detectedFid);
-      
-      // If FID detected and not in dev mode, auto-redirect to swipe
-      if (detectedFid > 0 && !devBypass) {
-        setTimeout(() => {
-          router.push("/swipe");
-        }, 1500);
+      if (detectedFid > 0) {
+        setFid(detectedFid);
+        setLoading(false);
+        
+        console.log("[home] ✅ FID detected:", detectedFid);
+        
+        // If FID detected and not in dev mode, auto-redirect to swipe
+        if (!devBypass) {
+          setTimeout(() => {
+            router.push("/swipe");
+          }, 1000);
+        }
+        
+        return true;
       }
       
-      return detectedFid > 0;
-    } catch (e) {
-      console.warn("[home] Failed to get FID:", e);
+      // If no FID and we haven't retried yet, try once more
+      if (retryCount === 0) {
+        console.log("[home] No FID found, retrying...");
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return await checkFid(1);
+      }
+      
+      setFid(null);
+      setLoading(false);
+      return false;
+    } catch (e: any) {
+      console.warn("[home] Failed to get FID:", e?.message || e);
       setFid(null);
       setLoading(false);
       return false;
@@ -91,18 +114,33 @@ export default function Home() {
           
           // First, try to get FID directly from Farcaster context (Base App)
           // This is the most reliable method since Base App has Farcaster integration
+          console.log("[home] Initializing Farcaster SDK...");
           await initializeFarcasterSDK();
-          await new Promise(resolve => setTimeout(resolve, 500)); // Give SDK more time to initialize
+          
+          // Give SDK more time to initialize and get context from Base App
+          // Base App might need a bit more time to provide context
+          await new Promise(resolve => setTimeout(resolve, 800));
           
           if (!isMounted) return;
           
-          const ctx = await getFarcasterContext();
+          // Try multiple times to get context (Base App might need time)
+          let ctx = await getFarcasterContext();
           let detectedFid = ctx?.fid || 0;
+          
+          // If no FID, wait a bit more and try again (Base App context might be delayed)
+          if (detectedFid === 0) {
+            console.log("[home] No FID on first try, waiting and retrying...");
+            await new Promise(resolve => setTimeout(resolve, 500));
+            ctx = await getFarcasterContext();
+            detectedFid = ctx?.fid || 0;
+          }
           
           console.log("[home] Farcaster context check result:", {
             hasContext: !!ctx,
             fid: detectedFid,
             username: ctx?.username,
+            displayName: ctx?.displayName,
+            accountAddress: ctx?.accountAddress,
           });
           
           if (detectedFid > 0 && isMounted) {

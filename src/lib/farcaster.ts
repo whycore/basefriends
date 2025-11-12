@@ -24,14 +24,26 @@ export async function initializeFarcasterSDK(): Promise<void> {
 
 export async function getFarcasterContext(): Promise<FarcasterContext | null> {
   try {
+    // Ensure SDK is initialized
     if (!sdkInitialized) {
       await initializeFarcasterSDK();
     }
     
+    // Wait a bit for SDK to be fully ready (especially in Base App)
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     // Safely access context with proper error handling
     let context: any = null;
     try {
+      // Primary method: direct access
       context = (sdk as any).context;
+      
+      // If context is null/undefined, try waiting a bit more (Base App might need time)
+      if (!context) {
+        console.log("[farcaster] Context not immediately available, waiting...");
+        await new Promise(resolve => setTimeout(resolve, 300));
+        context = (sdk as any).context;
+      }
     } catch (e) {
       console.log("[farcaster] Direct context access failed, trying alternatives");
       try {
@@ -45,16 +57,28 @@ export async function getFarcasterContext(): Promise<FarcasterContext | null> {
       }
     }
     
-    // Log for debugging - safely
+    // Log for debugging - safely and more detailed
     try {
+      const sdkKeys = sdk ? Object.keys(sdk).slice(0, 15) : [];
+      const contextKeys = context ? Object.keys(context).slice(0, 15) : [];
+      
       console.log("[farcaster] Context check:", {
         hasSDK: !!sdk,
+        sdkKeys: sdkKeys,
         hasContext: !!context,
         contextType: typeof context,
+        contextKeys: contextKeys,
       });
       
+      // Log specific context properties if available
       if (context) {
-        console.log("[farcaster] Context keys:", Object.keys(context).slice(0, 10));
+        console.log("[farcaster] Context details:", {
+          fid: context.fid,
+          hasUser: !!context.user,
+          hasAccount: !!context.account,
+          userKeys: context.user ? Object.keys(context.user).slice(0, 10) : [],
+          accountKeys: context.account ? Object.keys(context.account).slice(0, 10) : [],
+        });
       }
     } catch (logError) {
       console.warn("[farcaster] Logging failed:", logError);
@@ -64,47 +88,43 @@ export async function getFarcasterContext(): Promise<FarcasterContext | null> {
     let fid = 0;
     try {
       if (context) {
-        // Try direct fid property
-        if (context.fid !== undefined && context.fid !== null) {
-          if (typeof context.fid === "number") {
-            fid = context.fid;
-          } else if (typeof context.fid === "string") {
-            const parsed = parseInt(context.fid, 10);
-            if (!isNaN(parsed)) fid = parsed;
-          } else if (typeof context.fid === "bigint") {
-            fid = Number(context.fid);
+        // Try multiple paths for FID extraction
+        const fidPaths = [
+          () => context.fid,
+          () => context.user?.fid,
+          () => context.user?.farcasterId,
+          () => context.cast?.author?.fid,
+          () => context.viewerContext?.fid,
+          () => context.client?.fid,
+        ];
+        
+        for (const getFid of fidPaths) {
+          try {
+            const fidValue = getFid();
+            if (fidValue !== undefined && fidValue !== null && fidValue !== 0) {
+              if (typeof fidValue === "number") {
+                fid = fidValue;
+                break;
+              } else if (typeof fidValue === "string") {
+                const parsed = parseInt(fidValue, 10);
+                if (!isNaN(parsed) && parsed > 0) {
+                  fid = parsed;
+                  break;
+                }
+              } else if (typeof fidValue === "bigint") {
+                const num = Number(fidValue);
+                if (!isNaN(num) && num > 0) {
+                  fid = num;
+                  break;
+                }
+              }
+            }
+          } catch (e) {
+            // Continue to next path
           }
         }
         
-        // If still 0, try user.fid
-        if (fid === 0 && context.user) {
-          const userFid = context.user.fid;
-          if (userFid !== undefined && userFid !== null) {
-            if (typeof userFid === "number") {
-              fid = userFid;
-            } else if (typeof userFid === "string") {
-              const parsed = parseInt(userFid, 10);
-              if (!isNaN(parsed)) fid = parsed;
-            } else if (typeof userFid === "bigint") {
-              fid = Number(userFid);
-            }
-          }
-        }
-        
-        // If still 0, try cast.author.fid
-        if (fid === 0 && context.cast?.author) {
-          const authorFid = context.cast.author.fid;
-          if (authorFid !== undefined && authorFid !== null) {
-            if (typeof authorFid === "number") {
-              fid = authorFid;
-            } else if (typeof authorFid === "string") {
-              const parsed = parseInt(authorFid, 10);
-              if (!isNaN(parsed)) fid = parsed;
-            } else if (typeof authorFid === "bigint") {
-              fid = Number(authorFid);
-            }
-          }
-        }
+        console.log("[farcaster] FID extraction result:", { fid, hasContext: !!context });
       }
     } catch (fidError: any) {
       console.warn("[farcaster] FID extraction failed:", fidError?.message || fidError);
