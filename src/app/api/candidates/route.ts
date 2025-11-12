@@ -46,11 +46,22 @@ export async function GET(req: NextRequest) {
     // Simple seed candidate list for PoC; replace with smarter selection later.
     const seedFids = [2, 3, 5650, 565, 6131, 8090, 12, 602, 999];
     const client = getNeynarClient();
-    const viewerFid = 0;
-    const resp = await client.fetchBulkUsers({
-      fids: seedFids,
-      viewerFid,
-    });
+    
+    // Try without viewerFid first (some Neynar endpoints don't require it)
+    let resp;
+    try {
+      resp = await client.fetchBulkUsers({
+        fids: seedFids,
+      });
+    } catch (e: any) {
+      // If that fails, try with viewerFid (but use a valid FID, not 0)
+      console.log("[candidates] Retrying with viewerFid...");
+      resp = await client.fetchBulkUsers({
+        fids: seedFids,
+        viewerFid: 1, // Use a valid FID instead of 0
+      });
+    }
+    
     const candidates =
       resp.users?.map((u: any) => ({
         fid: u.fid,
@@ -64,7 +75,11 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ candidates });
   } catch (error: any) {
-    console.error("GET /api/candidates error", error);
+    console.error("GET /api/candidates error", {
+      message: error?.message,
+      status: error?.response?.status,
+      data: error?.response?.data,
+    });
     // Last-resort: return mock to avoid blocking dev
     return NextResponse.json({ candidates: mockCandidates(), warning: "mock_fallback" }, { status: 200 });
   }
