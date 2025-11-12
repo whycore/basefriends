@@ -27,18 +27,39 @@ export async function getFarcasterContext(): Promise<FarcasterContext | null> {
     if (!sdkInitialized) {
       await initializeFarcasterSDK();
     }
-    const context = sdk.context as any;
     
-    // Log for debugging
-    console.log("[farcaster] Context:", {
+    // Try multiple ways to access context
+    const context = (sdk as any).context || (sdk as any).client?.context || (sdk as any).getContext?.();
+    
+    // Log for debugging - more detailed
+    console.log("[farcaster] Full SDK object:", {
+      hasSDK: !!sdk,
+      sdkKeys: Object.keys(sdk || {}),
+      hasContext: !!context,
+      contextKeys: context ? Object.keys(context) : [],
+    });
+    
+    console.log("[farcaster] Context details:", {
       hasContext: !!context,
       fid: context?.fid,
       hasUser: !!context?.user,
       hasAccount: !!context?.account,
+      userKeys: context?.user ? Object.keys(context.user) : [],
+      accountKeys: context?.account ? Object.keys(context.account) : [],
     });
     
-    const rawUsername = context?.user?.username;
-    const rawDisplayName = context?.user?.displayName;
+    // Try different paths for FID
+    let fid = 0;
+    if (context?.fid) {
+      fid = Number(context.fid) || 0;
+    } else if (context?.user?.fid) {
+      fid = Number(context.user.fid) || 0;
+    } else if (context?.cast?.author?.fid) {
+      fid = Number(context.cast.author.fid) || 0;
+    }
+    
+    const rawUsername = context?.user?.username || context?.username;
+    const rawDisplayName = context?.user?.displayName || context?.displayName;
     const username =
       rawUsername && (typeof rawUsername === "string" || typeof rawUsername === "number")
         ? String(rawUsername).trim() || undefined
@@ -48,9 +69,8 @@ export async function getFarcasterContext(): Promise<FarcasterContext | null> {
       (typeof rawDisplayName === "string" || typeof rawDisplayName === "number")
         ? String(rawDisplayName).trim() || undefined
         : undefined;
-    const accountAddress = context?.account?.address;
+    const accountAddress = context?.account?.address || context?.address;
     
-    const fid = context?.fid || 0;
     const result = {
       fid,
       username,
@@ -58,7 +78,7 @@ export async function getFarcasterContext(): Promise<FarcasterContext | null> {
       accountAddress: typeof accountAddress === "string" ? accountAddress : undefined,
     };
     
-    console.log("[farcaster] Extracted context:", { fid, username, displayName });
+    console.log("[farcaster] Extracted context:", { fid, username, displayName, accountAddress });
     return result;
   } catch (error) {
     console.warn("Failed to get Farcaster context:", error);

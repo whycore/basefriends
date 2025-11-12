@@ -38,93 +38,92 @@ export async function POST(req: NextRequest) {
       );
     }
     
-    try {
-      // Try Neynar API v2 endpoint for user lookup by verification address
-      const apiUrl = `https://api.neynar.com/v2/farcaster/user/by_verification?verification=${normalizedAddress}`;
-      console.log("[lookup-fid] Calling Neynar API:", apiUrl);
-      
-      const response = await fetch(apiUrl, {
-        headers: {
-          "api_key": apiKey,
-          "accept": "application/json",
-        },
-      });
-      
-      console.log("[lookup-fid] API response status:", response.status);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log("[lookup-fid] API response data:", JSON.stringify(data).substring(0, 500));
-        
-        // Handle different response formats
-        let user = null;
-        if (data.result && data.result.user) {
-          user = data.result.user;
-        } else if (data.user) {
-          user = data.user;
-        } else if (data.result && data.result.fid) {
-          // Direct result format
-          user = data.result;
-        }
-        
-        if (user && user.fid) {
-          console.log("[lookup-fid] ✅ FID found:", user.fid);
-          return NextResponse.json({
-            fid: user.fid,
-            username: user.username,
-            displayName: user.display_name,
-          });
-        } else {
-          console.log("[lookup-fid] ⚠️ User found but no FID in response");
-        }
-      } else {
-        const errorText = await response.text();
-        console.error("[lookup-fid] API error:", {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorText.substring(0, 500),
-        });
-      }
-    } catch (e: any) {
-      console.error("[lookup-fid] API call failed:", {
-        message: e?.message,
-        stack: e?.stack,
-      });
-      
-      // Fallback: try alternative endpoint format
+    // Try multiple Neynar API endpoints
+    const endpoints = [
+      // V2 endpoint with verification parameter
+      `https://api.neynar.com/v2/farcaster/user/by_verification?verification=${normalizedAddress}`,
+      // V2 endpoint with address parameter
+      `https://api.neynar.com/v2/farcaster/user/by_verification?address=${normalizedAddress}`,
+      // V1 endpoint
+      `https://api.neynar.com/v1/farcaster/user/by_verification?address=${normalizedAddress}`,
+    ];
+    
+    for (const apiUrl of endpoints) {
       try {
-        console.log("[lookup-fid] Trying alternative endpoint...");
-        const response = await fetch(
-          `https://api.neynar.com/v1/farcaster/user/by_verification?address=${normalizedAddress}`,
-          {
-            headers: {
-              "api_key": apiKey,
-              "accept": "application/json",
-            },
-          }
-        );
+        console.log("[lookup-fid] Trying endpoint:", apiUrl);
         
-        console.log("[lookup-fid] Alternative endpoint status:", response.status);
+        const response = await fetch(apiUrl, {
+          headers: {
+            "api_key": apiKey,
+            "accept": "application/json",
+          },
+        });
+        
+        console.log("[lookup-fid] Response status:", response.status);
         
         if (response.ok) {
           const data = await response.json();
-          console.log("[lookup-fid] Alternative endpoint data:", JSON.stringify(data).substring(0, 500));
+          console.log("[lookup-fid] Response data:", JSON.stringify(data).substring(0, 1000));
           
-          if (data.result && data.result.fid) {
-            console.log("[lookup-fid] ✅ FID found from alternative endpoint:", data.result.fid);
+          // Handle different response formats
+          let user = null;
+          
+          // Try various response structures
+          if (data.result?.user) {
+            user = data.result.user;
+          } else if (data.result && data.result.fid) {
+            user = data.result;
+          } else if (data.user) {
+            user = data.user;
+          } else if (data.fid) {
+            user = data;
+          }
+          
+          if (user && user.fid) {
+            console.log("[lookup-fid] ✅ FID found:", user.fid);
             return NextResponse.json({
-              fid: data.result.fid,
-              username: data.result.username,
-              displayName: data.result.display_name,
+              fid: user.fid,
+              username: user.username || user.display_name,
+              displayName: user.display_name || user.displayName,
             });
+          } else {
+            console.log("[lookup-fid] ⚠️ Response OK but no user/FID found in data structure");
           }
         } else {
           const errorText = await response.text();
-          console.error("[lookup-fid] Alternative endpoint error:", errorText.substring(0, 500));
+          console.log("[lookup-fid] Endpoint returned error:", {
+            status: response.status,
+            error: errorText.substring(0, 300),
+          });
         }
-      } catch (e2: any) {
-        console.error("[lookup-fid] Alternative endpoint also failed:", e2?.message);
+      } catch (e: any) {
+        console.error("[lookup-fid] Endpoint failed:", {
+          url: apiUrl,
+          error: e?.message,
+        });
+        // Continue to next endpoint
       }
+    }
+    
+    // If all endpoints failed, try using Neynar SDK if available
+    try {
+      console.log("[lookup-fid] Trying Neynar SDK method...");
+      const { getNeynarClient } = await import("@/lib/neynar");
+      const client = getNeynarClient();
+      
+      // Try to search users by address (if method exists)
+      // Note: This might not work, but worth trying
+      const searchResult = await (client as any).searchUser?.(normalizedAddress);
+      if (searchResult?.fid) {
+        console.log("[lookup-fid] ✅ FID found via SDK search:", searchResult.fid);
+        return NextResponse.json({
+          fid: searchResult.fid,
+          username: searchResult.username,
+          displayName: searchResult.display_name,
+        });
+      }
+    } catch (sdkError: any) {
+      console.log("[lookup-fid] SDK method not available:", sdkError?.message);
     }
 
     return NextResponse.json(
