@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { getFarcasterContext, initializeFarcasterSDK } from "@/lib/farcaster";
 import { useAccount, useConnect } from "wagmi";
+import Logo from "@/components/Logo";
 
 export default function Home() {
   const router = useRouter();
@@ -350,6 +351,9 @@ export default function Home() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-white">
       <div className="text-center max-w-md mx-auto p-6">
         <div className="mb-8">
+          <div className="flex items-center justify-center mb-4">
+            <Logo size={64} />
+          </div>
           <h1 className="text-4xl font-bold text-blue-700 mb-4">BaseFriends</h1>
           <p className="text-xl text-blue-600 mb-2">Meet builders on Base</p>
           <p className="text-gray-600">

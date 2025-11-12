@@ -5,14 +5,27 @@ declare global {
   var prisma: PrismaClient | undefined;
 }
 
+// Helper to check if DATABASE_URL is for connection pooler
+function getDatabaseUrl(): string {
+  const dbUrl = process.env.DATABASE_URL || "";
+  
+  // If it's a Supabase connection string, ensure it has pgbouncer parameter
+  if (dbUrl.includes("supabase.co") && !dbUrl.includes("pgbouncer=true") && !dbUrl.includes("?")) {
+    // Add pgbouncer parameter for connection pooler compatibility
+    return `${dbUrl}?pgbouncer=true`;
+  }
+  
+  return dbUrl;
+}
+
 export const prisma =
   global.prisma ||
   new PrismaClient({
-    log: ["error", "warn"],
+    log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error", "warn"],
     // Disable prepared statements for connection pooler compatibility
     datasources: {
       db: {
-        url: process.env.DATABASE_URL,
+        url: getDatabaseUrl(),
       },
     },
   });

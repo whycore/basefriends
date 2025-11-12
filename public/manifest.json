@@ -1,0 +1,19 @@
+{
+  "name": "BaseFriends",
+  "short_name": "BaseFriends",
+  "description": "Meet builders on Base. Connect with like-minded builders and expand your network.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0052FF",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
+

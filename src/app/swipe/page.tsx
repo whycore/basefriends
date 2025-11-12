@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
 import { getFarcasterContext } from "@/lib/farcaster";
 import { sdk } from "@farcaster/miniapp-sdk";
+import Logo from "@/components/Logo";
 
 type Candidate = {
   fid: number;
@@ -203,15 +204,18 @@ export default function SwipePage() {
     <div className="flex items-center justify-center min-h-[70vh] p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-md border border-blue-100">
         <div className="p-6">
-          <div className="flex justify-end">
-            {!siwnConnected && enableSiwn && (
-              <a
-                href="/auth/neynar/start"
-                className="text-xs px-3 py-1.5 rounded-lg border border-blue-300 text-blue-700"
-              >
-                Connect Farcaster
-              </a>
-            )}
+          <div className="flex items-center justify-between mb-4">
+            <Logo size={40} />
+            <div className="flex justify-end">
+              {!siwnConnected && enableSiwn && (
+                <a
+                  href="/auth/neynar/start"
+                  className="text-xs px-3 py-1.5 rounded-lg border border-blue-300 text-blue-700"
+                >
+                  Connect Farcaster
+                </a>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-4">
             {current.pfpUrl ? (
