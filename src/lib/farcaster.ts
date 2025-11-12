@@ -60,26 +60,54 @@ export async function getFarcasterContext(): Promise<FarcasterContext | null> {
       console.warn("[farcaster] Logging failed:", logError);
     }
     
-    // Safely extract FID
+    // Safely extract FID - avoid any string conversion that might cause errors
     let fid = 0;
     try {
       if (context) {
-        if (typeof context.fid === "number") {
-          fid = context.fid;
-        } else if (typeof context.fid === "string") {
-          fid = parseInt(context.fid, 10) || 0;
-        } else if (context.user?.fid) {
-          fid = typeof context.user.fid === "number" 
-            ? context.user.fid 
-            : parseInt(String(context.user.fid), 10) || 0;
-        } else if (context.cast?.author?.fid) {
-          fid = typeof context.cast.author.fid === "number"
-            ? context.cast.author.fid
-            : parseInt(String(context.cast.author.fid), 10) || 0;
+        // Try direct fid property
+        if (context.fid !== undefined && context.fid !== null) {
+          if (typeof context.fid === "number") {
+            fid = context.fid;
+          } else if (typeof context.fid === "string") {
+            const parsed = parseInt(context.fid, 10);
+            if (!isNaN(parsed)) fid = parsed;
+          } else if (typeof context.fid === "bigint") {
+            fid = Number(context.fid);
+          }
+        }
+        
+        // If still 0, try user.fid
+        if (fid === 0 && context.user) {
+          const userFid = context.user.fid;
+          if (userFid !== undefined && userFid !== null) {
+            if (typeof userFid === "number") {
+              fid = userFid;
+            } else if (typeof userFid === "string") {
+              const parsed = parseInt(userFid, 10);
+              if (!isNaN(parsed)) fid = parsed;
+            } else if (typeof userFid === "bigint") {
+              fid = Number(userFid);
+            }
+          }
+        }
+        
+        // If still 0, try cast.author.fid
+        if (fid === 0 && context.cast?.author) {
+          const authorFid = context.cast.author.fid;
+          if (authorFid !== undefined && authorFid !== null) {
+            if (typeof authorFid === "number") {
+              fid = authorFid;
+            } else if (typeof authorFid === "string") {
+              const parsed = parseInt(authorFid, 10);
+              if (!isNaN(parsed)) fid = parsed;
+            } else if (typeof authorFid === "bigint") {
+              fid = Number(authorFid);
+            }
+          }
         }
       }
-    } catch (fidError) {
-      console.warn("[farcaster] FID extraction failed:", fidError);
+    } catch (fidError: any) {
+      console.warn("[farcaster] FID extraction failed:", fidError?.message || fidError);
     }
     
     // Safely extract other fields
