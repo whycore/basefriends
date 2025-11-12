@@ -1,58 +1,59 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { getFarcasterContext, initializeFarcasterSDK } from "@/lib/farcaster";
+import { useAccount, useConnect } from "wagmi";
 
 export default function Home() {
   const router = useRouter();
   const [fid, setFid] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [devBypass, setDevBypass] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const { address, isConnected } = useAccount();
+  const { connect, connectors } = useConnect();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setDevBypass(params.get("dev") === "1");
   }, []);
 
+  const checkFid = useCallback(async () => {
+    try {
+      // Initialize SDK first (calls ready() to hide splash screen)
+      await initializeFarcasterSDK();
+      
+      // Small delay to ensure SDK is ready
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      // Get Farcaster context
+      const ctx = await getFarcasterContext();
+      const detectedFid = ctx?.fid || 0;
+      
+      setFid(detectedFid > 0 ? detectedFid : null);
+      setLoading(false);
+      
+      console.log("[home] FID detected:", detectedFid);
+      
+      // If FID detected and not in dev mode, auto-redirect to swipe
+      if (detectedFid > 0 && !devBypass) {
+        setTimeout(() => {
+          router.push("/swipe");
+        }, 1500);
+      }
+      
+      return detectedFid > 0;
+    } catch (e) {
+      console.warn("[home] Failed to get FID:", e);
+      setFid(null);
+      setLoading(false);
+      return false;
+    }
+  }, [router, devBypass]);
+
   useEffect(() => {
     let mounted = true;
-    
-    const checkAuth = async () => {
-      try {
-        // Initialize SDK first (calls ready() to hide splash screen)
-        await initializeFarcasterSDK();
-        
-        // Small delay to ensure SDK is ready
-        await new Promise(resolve => setTimeout(resolve, 200));
-        
-        if (!mounted) return;
-        
-        // Get Farcaster context
-        const ctx = await getFarcasterContext();
-        const detectedFid = ctx?.fid || 0;
-        
-        if (!mounted) return;
-        
-        setFid(detectedFid > 0 ? detectedFid : null);
-        setLoading(false);
-        
-        console.log("[home] FID detected:", detectedFid);
-        
-        // If FID detected and not in dev mode, auto-redirect to swipe
-        if (detectedFid > 0 && !devBypass) {
-          setTimeout(() => {
-            router.push("/swipe");
-          }, 1500);
-        }
-      } catch (e) {
-        console.warn("[home] Failed to get FID:", e);
-        if (mounted) {
-          setFid(null);
-          setLoading(false);
-        }
-      }
-    };
     
     // Add timeout to prevent infinite loading (fallback)
     const timeout = setTimeout(() => {
@@ -62,13 +63,40 @@ export default function Home() {
       }
     }, 3000);
     
-    checkAuth();
+    checkFid();
     
     return () => {
       mounted = false;
       clearTimeout(timeout);
     };
-  }, [router, devBypass]);
+  }, [checkFid]);
+
+  const handleConnect = async () => {
+    try {
+      // Try to connect via Farcaster Mini App connector
+      const farcasterConnector = connectors.find(
+        (c) => c.id === "farcasterMiniApp"
+      );
+      
+      if (farcasterConnector) {
+        connect({ connector: farcasterConnector });
+      }
+      
+      // Re-check FID after a delay
+      setTimeout(async () => {
+        const success = await checkFid();
+        if (success) {
+          router.push("/swipe");
+        } else {
+          setRetryCount((prev) => prev + 1);
+        }
+      }, 1000);
+    } catch (e) {
+      console.error("[home] Connect failed:", e);
+      // Fallback: redirect to swipe with dev mode
+      router.push("/swipe?dev=1");
+    }
+  };
 
   if (loading) {
     return (
@@ -120,24 +148,43 @@ export default function Home() {
             <div className="mb-4">
               <div className="text-5xl mb-4">👋</div>
               <h2 className="text-xl font-semibold text-gray-800 mb-2">
-                Open in Base App
+                Connect Your Account
               </h2>
               <p className="text-gray-600 text-sm mb-4">
-                To use BaseFriends, please open this app inside the Base App.
-                Your Farcaster account will be automatically connected.
+                Connect your Farcaster account to start meeting builders on Base.
               </p>
             </div>
-            {devBypass && (
-              <div className="mt-4 pt-4 border-t border-gray-200">
-                <p className="text-xs text-gray-500 mb-3">Development Mode</p>
-                <a
-                  href="/swipe?dev=1"
-                  className="inline-block px-4 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors"
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={handleConnect}
+                className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
+              >
+                Connect With Your Account
+              </button>
+              {retryCount > 0 && (
+                <button
+                  onClick={async () => {
+                    setRetryCount(0);
+                    setLoading(true);
+                    await checkFid();
+                  }}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
                 >
-                  Continue with Dev Mode →
-                </a>
-              </div>
-            )}
+                  Retry Connection
+                </button>
+              )}
+              {devBypass && (
+                <div className="mt-2 pt-2 border-t border-gray-200">
+                  <p className="text-xs text-gray-500 mb-2">Development Mode</p>
+                  <a
+                    href="/swipe?dev=1"
+                    className="inline-block px-4 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors"
+                  >
+                    Continue with Dev Mode →
+                  </a>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="bg-white rounded-xl shadow-lg p-6 border border-green-200">
