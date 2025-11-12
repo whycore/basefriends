@@ -12,6 +12,7 @@
     "name": "BaseFriends",
     "homeUrl": "https://basefriends.vercel.app",
     "iconUrl": "https://basefriends.vercel.app/icon.png",
+    "imageUrl": "https://basefriends.vercel.app/og-image.png",
     "splashImageUrl": "https://basefriends.vercel.app/splash.png",
     "splashBackgroundColor": "#0A7AFF",
     "primaryCategory": "social",
