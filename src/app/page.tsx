@@ -71,30 +71,103 @@ export default function Home() {
     };
   }, [checkFid]);
 
+  // When wallet connects, try to get FID from address
+  useEffect(() => {
+    if (isConnected && address && !fid) {
+      const lookupFidFromAddress = async () => {
+        try {
+          console.log("[home] Wallet connected, looking up FID from address:", address);
+          const response = await fetch("/api/lookup-fid", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ address }),
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            const detectedFid = data.fid || 0;
+            if (detectedFid > 0) {
+              console.log("[home] FID found from connected wallet:", detectedFid);
+              setFid(detectedFid);
+              if (!devBypass) {
+                setTimeout(() => {
+                  router.push("/swipe");
+                }, 500);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("[home] Failed to lookup FID from connected wallet:", e);
+        }
+      };
+      
+      lookupFidFromAddress();
+    }
+  }, [isConnected, address, fid, router, devBypass]);
+
   const handleConnect = async () => {
     try {
-      // Try to connect via Farcaster Mini App connector
-      const farcasterConnector = connectors.find(
-        (c) => c.id === "farcasterMiniApp"
-      );
+      setLoading(true);
       
-      if (farcasterConnector) {
-        connect({ connector: farcasterConnector });
+      // Try to connect wallet (smart wallet from Base App)
+      const injectedConnector = connectors.find((c) => c.id === "injected");
+      const farcasterConnector = connectors.find((c) => c.id === "farcasterMiniApp");
+      
+      // Prefer injected connector (smart wallet), fallback to farcaster connector
+      const connector = injectedConnector || farcasterConnector;
+      
+      if (!connector) {
+        console.error("[home] No connector available");
+        setLoading(false);
+        setRetryCount((prev) => prev + 1);
+        return;
       }
       
-      // Re-check FID after a delay
-      setTimeout(async () => {
-        const success = await checkFid();
-        if (success) {
-          router.push("/swipe");
-        } else {
-          setRetryCount((prev) => prev + 1);
+      // Connect wallet
+      connect({ connector });
+      
+      // Wait a bit for connection to complete
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // After wallet connected, try to get FID
+      // First, try Farcaster context (might be available after wallet connect)
+      const ctx = await getFarcasterContext();
+      let detectedFid = ctx?.fid || 0;
+      
+      // If FID not found from context, try lookup from wallet address
+      if (detectedFid === 0 && address) {
+        try {
+          console.log("[home] Looking up FID from address:", address);
+          const response = await fetch("/api/lookup-fid", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ address }),
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            detectedFid = data.fid || 0;
+            console.log("[home] FID found from address:", detectedFid);
+          }
+        } catch (e) {
+          console.warn("[home] Failed to lookup FID from address:", e);
         }
-      }, 1000);
+      }
+      
+      setLoading(false);
+      
+      if (detectedFid > 0) {
+        setFid(detectedFid);
+        setTimeout(() => {
+          router.push("/swipe");
+        }, 500);
+      } else {
+        setRetryCount((prev) => prev + 1);
+      }
     } catch (e) {
       console.error("[home] Connect failed:", e);
-      // Fallback: redirect to swipe with dev mode
-      router.push("/swipe?dev=1");
+      setLoading(false);
+      setRetryCount((prev) => prev + 1);
     }
   };
 
@@ -155,12 +228,31 @@ export default function Home() {
               </p>
             </div>
             <div className="flex flex-col gap-3">
-              <button
-                onClick={handleConnect}
-                className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
-              >
-                Connect With Your Account
-              </button>
+              {!isConnected ? (
+                <button
+                  onClick={handleConnect}
+                  disabled={loading}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? "Connecting..." : "Connect Wallet"}
+                </button>
+              ) : (
+                <div className="px-6 py-3 bg-green-50 border border-green-200 rounded-xl">
+                  <p className="text-sm text-green-700 font-medium">
+                    ✅ Wallet Connected
+                  </p>
+                  {address && (
+                    <p className="text-xs text-green-600 mt-1 font-mono truncate">
+                      {address.slice(0, 6)}...{address.slice(-4)}
+                    </p>
+                  )}
+                  {!fid && (
+                    <p className="text-xs text-gray-600 mt-2">
+                      Looking up your Farcaster account...
+                    </p>
+                  )}
+                </div>
+              )}
               {retryCount > 0 && (
                 <button
                   onClick={async () => {
