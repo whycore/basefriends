@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getFarcasterContext } from "@/lib/farcaster";
+import { getFarcasterContext, initializeFarcasterSDK } from "@/lib/farcaster";
 
 export default function Home() {
   const router = useRouter();
@@ -16,12 +16,26 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    let mounted = true;
+    
     const checkAuth = async () => {
       try {
-        setLoading(true);
+        // Initialize SDK first (calls ready() to hide splash screen)
+        await initializeFarcasterSDK();
+        
+        // Small delay to ensure SDK is ready
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        if (!mounted) return;
+        
+        // Get Farcaster context
         const ctx = await getFarcasterContext();
         const detectedFid = ctx?.fid || 0;
+        
+        if (!mounted) return;
+        
         setFid(detectedFid > 0 ? detectedFid : null);
+        setLoading(false);
         
         console.log("[home] FID detected:", detectedFid);
         
@@ -33,12 +47,27 @@ export default function Home() {
         }
       } catch (e) {
         console.warn("[home] Failed to get FID:", e);
-        setFid(null);
-      } finally {
-        setLoading(false);
+        if (mounted) {
+          setFid(null);
+          setLoading(false);
+        }
       }
     };
+    
+    // Add timeout to prevent infinite loading (fallback)
+    const timeout = setTimeout(() => {
+      if (mounted) {
+        console.warn("[home] Timeout reached, stopping loading");
+        setLoading(false);
+      }
+    }, 3000);
+    
     checkAuth();
+    
+    return () => {
+      mounted = false;
+      clearTimeout(timeout);
+    };
   }, [router, devBypass]);
 
   if (loading) {
