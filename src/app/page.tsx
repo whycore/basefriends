@@ -74,19 +74,39 @@ export default function Home() {
   // When wallet connects, try to get FID from Farcaster context first (Base App)
   useEffect(() => {
     if (isConnected && address && !fid) {
+      let timeoutId: NodeJS.Timeout;
+      let isMounted = true;
+      
       const getFidFromContext = async () => {
         try {
-          console.log("[home] Wallet connected, checking Farcaster context...");
+          console.log("[home] Wallet connected, checking Farcaster context...", { address });
+          
+          // Set timeout to prevent infinite loading (10 seconds)
+          timeoutId = setTimeout(() => {
+            if (isMounted) {
+              console.warn("[home] Timeout: FID lookup taking too long");
+              setRetryCount((prev) => prev + 1);
+            }
+          }, 10000);
           
           // First, try to get FID directly from Farcaster context (Base App)
           // This is the most reliable method since Base App has Farcaster integration
           await initializeFarcasterSDK();
-          await new Promise(resolve => setTimeout(resolve, 300)); // Give SDK time to initialize
+          await new Promise(resolve => setTimeout(resolve, 500)); // Give SDK more time to initialize
+          
+          if (!isMounted) return;
           
           const ctx = await getFarcasterContext();
           let detectedFid = ctx?.fid || 0;
           
-          if (detectedFid > 0) {
+          console.log("[home] Farcaster context check result:", {
+            hasContext: !!ctx,
+            fid: detectedFid,
+            username: ctx?.username,
+          });
+          
+          if (detectedFid > 0 && isMounted) {
+            clearTimeout(timeoutId);
             console.log("[home] ✅ FID found from Farcaster context:", detectedFid);
             setFid(detectedFid);
             if (!devBypass) {
@@ -98,34 +118,71 @@ export default function Home() {
           }
           
           // Fallback: If Farcaster context not available, try API lookup
-          console.log("[home] Farcaster context not available, trying API lookup...");
-          const response = await fetch("/api/lookup-fid", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ address }),
-          });
+          console.log("[home] Farcaster context not available, trying API lookup...", { address });
           
-          if (response.ok) {
-            const data = await response.json();
-            detectedFid = data.fid || 0;
-            if (detectedFid > 0) {
-              console.log("[home] ✅ FID found from API lookup:", detectedFid);
-              setFid(detectedFid);
-              if (!devBypass) {
-                setTimeout(() => {
-                  router.push("/swipe");
-                }, 500);
+          try {
+            const response = await fetch("/api/lookup-fid", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ address }),
+            });
+            
+            console.log("[home] API lookup response status:", response.status);
+            
+            if (!isMounted) return;
+            
+            if (response.ok) {
+              const data = await response.json();
+              console.log("[home] API lookup response data:", data);
+              
+              detectedFid = data.fid || 0;
+              if (detectedFid > 0 && isMounted) {
+                clearTimeout(timeoutId);
+                console.log("[home] ✅ FID found from API lookup:", detectedFid);
+                setFid(detectedFid);
+                if (!devBypass) {
+                  setTimeout(() => {
+                    router.push("/swipe");
+                  }, 500);
+                }
+              } else if (isMounted) {
+                clearTimeout(timeoutId);
+                console.log("[home] ⚠️ FID not found for this address in API response");
+                setRetryCount((prev) => prev + 1);
               }
             } else {
-              console.log("[home] ⚠️ FID not found for this address");
+              const errorData = await response.json().catch(() => ({}));
+              console.error("[home] API lookup failed:", {
+                status: response.status,
+                error: errorData,
+              });
+              if (isMounted) {
+                clearTimeout(timeoutId);
+                setRetryCount((prev) => prev + 1);
+              }
+            }
+          } catch (apiError: any) {
+            console.error("[home] API lookup error:", apiError?.message || apiError);
+            if (isMounted) {
+              clearTimeout(timeoutId);
+              setRetryCount((prev) => prev + 1);
             }
           }
-        } catch (e) {
-          console.warn("[home] Failed to get FID from wallet:", e);
+        } catch (e: any) {
+          console.error("[home] Failed to get FID from wallet:", e?.message || e);
+          if (isMounted) {
+            clearTimeout(timeoutId);
+            setRetryCount((prev) => prev + 1);
+          }
         }
       };
       
       getFidFromContext();
+      
+      return () => {
+        isMounted = false;
+        if (timeoutId) clearTimeout(timeoutId);
+      };
     }
   }, [isConnected, address, fid, router, devBypass]);
 
@@ -285,9 +342,16 @@ export default function Home() {
                     </p>
                   )}
                   {!fid && (
-                    <p className="text-xs text-gray-600 mt-2">
-                      Looking up your Farcaster account...
-                    </p>
+                    <div className="mt-2">
+                      <p className="text-xs text-gray-600 mb-2">
+                        Looking up your Farcaster account...
+                      </p>
+                      {retryCount > 0 && (
+                        <p className="text-xs text-orange-600">
+                          ⚠️ FID not found. Make sure your wallet is connected to a Farcaster account.
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
