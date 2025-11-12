@@ -47,7 +47,9 @@ export default function SwipePage() {
         const fid = ctx?.fid || 0;
         setHasFarcaster(fid > 0);
         setCurrentFid(fid);
-      } catch {
+        console.log("[swipe] FID detected:", fid);
+      } catch (e) {
+        console.warn("[swipe] Failed to get FID:", e);
         setHasFarcaster(false);
         setCurrentFid(0);
       }

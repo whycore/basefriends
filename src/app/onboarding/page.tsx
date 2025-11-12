@@ -15,8 +15,11 @@ export default function OnboardingPage() {
     const checkContext = async () => {
       try {
         const ctx = await getFarcasterContext();
-        setCurrentFid(ctx?.fid || 0);
-      } catch {
+        const fid = ctx?.fid || 0;
+        setCurrentFid(fid);
+        console.log("[onboarding] FID detected:", fid);
+      } catch (e) {
+        console.warn("[onboarding] Failed to get FID:", e);
         setCurrentFid(0);
       }
     };

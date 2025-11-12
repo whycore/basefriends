@@ -21,23 +21,27 @@ export async function POST(req: NextRequest) {
     
     if (isPostgres) {
       try {
-        // Ensure User exists first (foreign key constraint)
-        await prisma.user.upsert({
-          where: { fid },
-          update: {},
-          create: { fid },
+        // Use transaction to ensure User is created before UserExtra
+        await prisma.$transaction(async (tx) => {
+          // Ensure User exists first (foreign key constraint)
+          await tx.user.upsert({
+            where: { fid },
+            update: {},
+            create: { fid },
+          });
+          console.log("[onboarding] User upsert success:", fid);
+          
+          // Then upsert UserExtra
+          const result = await tx.userExtra.upsert({
+            create: { fid, headline, interests, skills },
+            update: { headline, interests, skills },
+            where: { fid },
+          });
+          console.log("[onboarding] DB write success:", { fid: result.fid, headline: result.headline?.substring(0, 20) });
         });
-        console.log("[onboarding] User upsert success:", fid);
-        
-        // Then upsert UserExtra
-        const result = await prisma.userExtra.upsert({
-          create: { fid, headline, interests, skills },
-          update: { headline, interests, skills },
-          where: { fid },
-        });
-        console.log("[onboarding] DB write success:", { fid: result.fid, headline: result.headline?.substring(0, 20) });
       } catch (e: any) {
         console.error("[onboarding] DB write failed:", {
+          fid,
           error: e?.message || String(e),
           code: e?.code,
           stack: e?.stack,

@@ -28,6 +28,15 @@ export async function getFarcasterContext(): Promise<FarcasterContext | null> {
       await initializeFarcasterSDK();
     }
     const context = sdk.context as any;
+    
+    // Log for debugging
+    console.log("[farcaster] Context:", {
+      hasContext: !!context,
+      fid: context?.fid,
+      hasUser: !!context?.user,
+      hasAccount: !!context?.account,
+    });
+    
     const rawUsername = context?.user?.username;
     const rawDisplayName = context?.user?.displayName;
     const username =
@@ -40,15 +49,20 @@ export async function getFarcasterContext(): Promise<FarcasterContext | null> {
         ? String(rawDisplayName).trim() || undefined
         : undefined;
     const accountAddress = context?.account?.address;
-    return {
-      fid: context?.fid || 0,
+    
+    const fid = context?.fid || 0;
+    const result = {
+      fid,
       username,
       displayName,
       accountAddress: typeof accountAddress === "string" ? accountAddress : undefined,
     };
+    
+    console.log("[farcaster] Extracted context:", { fid, username, displayName });
+    return result;
   } catch (error) {
     console.warn("Failed to get Farcaster context:", error);
-    return null;
+    return { fid: 0 }; // Return default instead of null
   }
 }
 
