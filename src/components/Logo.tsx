@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { useState } from "react";
 
 interface LogoProps {
   size?: number;
@@ -12,31 +12,45 @@ interface LogoProps {
  * Falls back to text if logo image is not available.
  */
 export default function Logo({ size = 40, className = "" }: LogoProps) {
+  const [imageError, setImageError] = useState(false);
+  const [trySvg, setTrySvg] = useState(false); // Start with PNG since that's what we have
+
+  // Try logo.png first (since that's what exists), then logo.svg, then text fallback
+  const handleImageError = () => {
+    if (!trySvg) {
+      // Try SVG if PNG failed
+      setTrySvg(true);
+    } else {
+      // Both failed, show text fallback
+      setImageError(true);
+    }
+  };
+
+  if (imageError) {
+    // Text fallback
+    return (
+      <div className={`flex items-center ${className}`}>
+        <span className="text-blue-700 font-bold" style={{ fontSize: `${size * 0.6}px` }}>
+          BaseFriends
+        </span>
+      </div>
+    );
+  }
+
+  // Try PNG first (since that's what exists), then SVG
+  const logoSrc = trySvg ? "/logo.svg" : "/logo.png";
+
   return (
     <div className={`flex items-center ${className}`}>
-      {/* Try to load logo.svg first, fallback to logo.png, then text */}
-      <picture>
-        <source srcSet="/logo.svg" type="image/svg+xml" />
-        <img
-          src="/logo.png"
-          alt="BaseFriends"
-          width={size}
-          height={size}
-          className="object-contain"
-          onError={(e) => {
-            // If image fails to load, hide it and show text fallback
-            const target = e.target as HTMLImageElement;
-            target.style.display = "none";
-            const parent = target.parentElement;
-            if (parent && !parent.querySelector(".logo-fallback")) {
-              const fallback = document.createElement("span");
-              fallback.className = "logo-fallback text-blue-700 font-bold text-xl";
-              fallback.textContent = "BaseFriends";
-              parent.appendChild(fallback);
-            }
-          }}
-        />
-      </picture>
+      <img
+        src={logoSrc}
+        alt="BaseFriends"
+        width={size}
+        height={size}
+        className="object-contain"
+        onError={handleImageError}
+        style={{ maxWidth: `${size}px`, maxHeight: `${size}px` }}
+      />
     </div>
   );
 }
