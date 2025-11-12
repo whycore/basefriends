@@ -12,12 +12,9 @@ export async function GET() {
     
     if (isPostgres) {
       try {
-        // Simple query to test connection
-        const result = await prisma.$queryRaw`SELECT 1 as test`;
-        connectionTest = "connected";
-        
-        // Count records in Swipe table
+        // Simple query to test connection (avoid $queryRaw with pooler)
         const count = await prisma.swipe.count();
+        connectionTest = "connected";
         tableCount = count;
       } catch (e: any) {
         connectionTest = `error: ${e?.message || String(e)}`;
