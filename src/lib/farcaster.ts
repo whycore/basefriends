@@ -28,60 +28,103 @@ export async function getFarcasterContext(): Promise<FarcasterContext | null> {
       await initializeFarcasterSDK();
     }
     
-    // Try multiple ways to access context
-    const context = (sdk as any).context || (sdk as any).client?.context || (sdk as any).getContext?.();
-    
-    // Log for debugging - more detailed
-    console.log("[farcaster] Full SDK object:", {
-      hasSDK: !!sdk,
-      sdkKeys: Object.keys(sdk || {}),
-      hasContext: !!context,
-      contextKeys: context ? Object.keys(context) : [],
-    });
-    
-    console.log("[farcaster] Context details:", {
-      hasContext: !!context,
-      fid: context?.fid,
-      hasUser: !!context?.user,
-      hasAccount: !!context?.account,
-      userKeys: context?.user ? Object.keys(context.user) : [],
-      accountKeys: context?.account ? Object.keys(context.account) : [],
-    });
-    
-    // Try different paths for FID
-    let fid = 0;
-    if (context?.fid) {
-      fid = Number(context.fid) || 0;
-    } else if (context?.user?.fid) {
-      fid = Number(context.user.fid) || 0;
-    } else if (context?.cast?.author?.fid) {
-      fid = Number(context.cast.author.fid) || 0;
+    // Safely access context with proper error handling
+    let context: any = null;
+    try {
+      context = (sdk as any).context;
+    } catch (e) {
+      console.log("[farcaster] Direct context access failed, trying alternatives");
+      try {
+        context = (sdk as any).client?.context;
+      } catch (e2) {
+        try {
+          context = typeof (sdk as any).getContext === "function" ? (sdk as any).getContext() : null;
+        } catch (e3) {
+          console.warn("[farcaster] All context access methods failed");
+        }
+      }
     }
     
-    const rawUsername = context?.user?.username || context?.username;
-    const rawDisplayName = context?.user?.displayName || context?.displayName;
-    const username =
-      rawUsername && (typeof rawUsername === "string" || typeof rawUsername === "number")
-        ? String(rawUsername).trim() || undefined
-        : undefined;
-    const displayName =
-      rawDisplayName &&
-      (typeof rawDisplayName === "string" || typeof rawDisplayName === "number")
-        ? String(rawDisplayName).trim() || undefined
-        : undefined;
-    const accountAddress = context?.account?.address || context?.address;
+    // Log for debugging - safely
+    try {
+      console.log("[farcaster] Context check:", {
+        hasSDK: !!sdk,
+        hasContext: !!context,
+        contextType: typeof context,
+      });
+      
+      if (context) {
+        console.log("[farcaster] Context keys:", Object.keys(context).slice(0, 10));
+      }
+    } catch (logError) {
+      console.warn("[farcaster] Logging failed:", logError);
+    }
+    
+    // Safely extract FID
+    let fid = 0;
+    try {
+      if (context) {
+        if (typeof context.fid === "number") {
+          fid = context.fid;
+        } else if (typeof context.fid === "string") {
+          fid = parseInt(context.fid, 10) || 0;
+        } else if (context.user?.fid) {
+          fid = typeof context.user.fid === "number" 
+            ? context.user.fid 
+            : parseInt(String(context.user.fid), 10) || 0;
+        } else if (context.cast?.author?.fid) {
+          fid = typeof context.cast.author.fid === "number"
+            ? context.cast.author.fid
+            : parseInt(String(context.cast.author.fid), 10) || 0;
+        }
+      }
+    } catch (fidError) {
+      console.warn("[farcaster] FID extraction failed:", fidError);
+    }
+    
+    // Safely extract other fields
+    let username: string | undefined;
+    let displayName: string | undefined;
+    let accountAddress: string | undefined;
+    
+    try {
+      const rawUsername = context?.user?.username || context?.username;
+      if (rawUsername) {
+        username = String(rawUsername).trim() || undefined;
+      }
+    } catch (e) {
+      // Ignore
+    }
+    
+    try {
+      const rawDisplayName = context?.user?.displayName || context?.displayName;
+      if (rawDisplayName) {
+        displayName = String(rawDisplayName).trim() || undefined;
+      }
+    } catch (e) {
+      // Ignore
+    }
+    
+    try {
+      const addr = context?.account?.address || context?.address;
+      if (typeof addr === "string") {
+        accountAddress = addr;
+      }
+    } catch (e) {
+      // Ignore
+    }
     
     const result = {
       fid,
       username,
       displayName,
-      accountAddress: typeof accountAddress === "string" ? accountAddress : undefined,
+      accountAddress,
     };
     
     console.log("[farcaster] Extracted context:", { fid, username, displayName, accountAddress });
     return result;
-  } catch (error) {
-    console.warn("Failed to get Farcaster context:", error);
+  } catch (error: any) {
+    console.warn("Failed to get Farcaster context:", error?.message || error);
     return { fid: 0 }; // Return default instead of null
   }
 }

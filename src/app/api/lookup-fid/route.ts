@@ -38,15 +38,74 @@ export async function POST(req: NextRequest) {
       );
     }
     
+    // Try Base App's proxy endpoint first (if available)
+    // Note: These might not be public endpoints, but worth trying
+    const baseAppEndpoints = [
+      // Try with custody address (wallet address)
+      `https://www.base.dev/api/neynar/user-by-custody-address?address=${normalizedAddress}`,
+      `https://base.org/api/neynar/user-by-custody-address?address=${normalizedAddress}`,
+      // Try with verification address
+      `https://www.base.dev/api/neynar/user-by-verification?address=${normalizedAddress}`,
+      `https://base.org/api/neynar/user-by-verification?address=${normalizedAddress}`,
+    ];
+    
     // Try multiple Neynar API endpoints
-    const endpoints = [
+    // Note: custody_address is the wallet address, verification is the verified address
+    const neynarEndpoints = [
+      // V2 endpoint with custody address (wallet address)
+      `https://api.neynar.com/v2/farcaster/user/by_custody_address?custody_address=${normalizedAddress}`,
       // V2 endpoint with verification parameter
       `https://api.neynar.com/v2/farcaster/user/by_verification?verification=${normalizedAddress}`,
-      // V2 endpoint with address parameter
+      // V2 endpoint with address parameter (might work as alias)
       `https://api.neynar.com/v2/farcaster/user/by_verification?address=${normalizedAddress}`,
       // V1 endpoint
       `https://api.neynar.com/v1/farcaster/user/by_verification?address=${normalizedAddress}`,
     ];
+    
+    // Try Base App endpoints first
+    for (const apiUrl of baseAppEndpoints) {
+      try {
+        console.log("[lookup-fid] Trying Base App endpoint:", apiUrl);
+        
+        const response = await fetch(apiUrl, {
+          headers: {
+            "accept": "application/json",
+          },
+        });
+        
+        console.log("[lookup-fid] Base App response status:", response.status);
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log("[lookup-fid] Base App response data:", JSON.stringify(data).substring(0, 1000));
+          
+          // Handle Base App response format
+          let user = null;
+          if (data.user) {
+            user = data.user;
+          } else if (data.fid) {
+            user = data;
+          } else if (data.result) {
+            user = data.result;
+          }
+          
+          if (user && user.fid) {
+            console.log("[lookup-fid] ✅ FID found via Base App:", user.fid);
+            return NextResponse.json({
+              fid: user.fid,
+              username: user.username || user.display_name,
+              displayName: user.display_name || user.displayName,
+            });
+          }
+        }
+      } catch (e: any) {
+        console.log("[lookup-fid] Base App endpoint failed:", e?.message);
+        // Continue to next endpoint
+      }
+    }
+    
+    // Then try Neynar endpoints
+    const endpoints = neynarEndpoints;
     
     for (const apiUrl of endpoints) {
       try {
