@@ -10,7 +10,13 @@ export async function POST(req: NextRequest) {
 
     const dbUrl = process.env.DATABASE_URL || "";
     const isPostgres = dbUrl.startsWith("postgres://") || dbUrl.startsWith("postgresql://");
-    console.log("[onboarding] DB URL check:", { isPostgres, dbUrlPrefix: dbUrl.substring(0, 20) + "..." });
+    console.log("[onboarding] Request:", { 
+      isPostgres, 
+      dbUrlPrefix: dbUrl.substring(0, 20) + "...",
+      hasHeadline: !!headline,
+      hasInterests: !!interests,
+      hasSkills: !!skills,
+    });
     
     if (isPostgres) {
       try {
@@ -20,6 +26,7 @@ export async function POST(req: NextRequest) {
           update: {},
           create: { fid: 0 },
         });
+        console.log("[onboarding] User upsert success");
         
         // Then upsert UserExtra
         const result = await prisma.userExtra.upsert({
@@ -27,9 +34,13 @@ export async function POST(req: NextRequest) {
           update: { headline, interests, skills },
           where: { fid: 0 },
         });
-        console.log("[onboarding] DB write success:", result.fid);
+        console.log("[onboarding] DB write success:", { fid: result.fid, headline: result.headline?.substring(0, 20) });
       } catch (e: any) {
-        console.error("[onboarding] DB write failed:", e?.message || e);
+        console.error("[onboarding] DB write failed:", {
+          error: e?.message || String(e),
+          code: e?.code,
+          stack: e?.stack,
+        });
         // Don't fail the request, but log the error
       }
     } else {

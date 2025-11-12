@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     // Enable write only when using Postgres (Supabase/Neon). Skip for file-based sqlite on serverless.
     const dbUrl = process.env.DATABASE_URL || "";
     const isPostgres = dbUrl.startsWith("postgres://") || dbUrl.startsWith("postgresql://");
-    console.log("[swipe] DB URL check:", { isPostgres, dbUrlPrefix: dbUrl.substring(0, 20) + "..." });
+    console.log("[swipe] Request:", { action, fromFid, toFid, isPostgres, dbUrlPrefix: dbUrl.substring(0, 20) + "..." });
     
     if (isPostgres) {
       try {
@@ -26,16 +26,37 @@ export async function POST(req: NextRequest) {
           where: { fid: fromFid },
           update: {},
           create: { fid: fromFid },
-        }).catch(() => {
-          // Ignore if user already exists
+        }).catch((e) => {
+          console.log("[swipe] User upsert (non-fatal):", e?.message || "already exists");
         });
         
-        const result = await prisma.swipe.create({
-          data: { fromFid, toFid, action },
-        });
-        console.log("[swipe] DB write success:", result.id);
+        // Use create with unique constraint handling - if duplicate, update instead
+        try {
+          const result = await prisma.swipe.create({
+            data: { fromFid, toFid, action },
+          });
+          console.log("[swipe] DB write success (create):", { id: result.id, action, toFid });
+        } catch (createError: any) {
+          // If duplicate (unique constraint), update instead
+          if (createError?.code === "P2002" || createError?.message?.includes("Unique constraint")) {
+            const result = await prisma.swipe.updateMany({
+              where: { fromFid, toFid },
+              data: { action },
+            });
+            console.log("[swipe] DB write success (update):", { updated: result.count, action, toFid });
+          } else {
+            throw createError; // Re-throw if it's a different error
+          }
+        }
       } catch (e: any) {
-        console.error("[swipe] DB write failed:", e?.message || e);
+        console.error("[swipe] DB write failed:", {
+          action,
+          fromFid,
+          toFid,
+          error: e?.message || String(e),
+          code: e?.code,
+          stack: e?.stack,
+        });
         // Don't fail the request, but log the error
       }
     } else {
