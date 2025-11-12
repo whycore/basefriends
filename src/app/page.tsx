@@ -71,12 +71,34 @@ export default function Home() {
     };
   }, [checkFid]);
 
-  // When wallet connects, try to get FID from address
+  // When wallet connects, try to get FID from Farcaster context first (Base App)
   useEffect(() => {
     if (isConnected && address && !fid) {
-      const lookupFidFromAddress = async () => {
+      const getFidFromContext = async () => {
         try {
-          console.log("[home] Wallet connected, looking up FID from address:", address);
+          console.log("[home] Wallet connected, checking Farcaster context...");
+          
+          // First, try to get FID directly from Farcaster context (Base App)
+          // This is the most reliable method since Base App has Farcaster integration
+          await initializeFarcasterSDK();
+          await new Promise(resolve => setTimeout(resolve, 300)); // Give SDK time to initialize
+          
+          const ctx = await getFarcasterContext();
+          let detectedFid = ctx?.fid || 0;
+          
+          if (detectedFid > 0) {
+            console.log("[home] ✅ FID found from Farcaster context:", detectedFid);
+            setFid(detectedFid);
+            if (!devBypass) {
+              setTimeout(() => {
+                router.push("/swipe");
+              }, 500);
+            }
+            return;
+          }
+          
+          // Fallback: If Farcaster context not available, try API lookup
+          console.log("[home] Farcaster context not available, trying API lookup...");
           const response = await fetch("/api/lookup-fid", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -85,23 +107,25 @@ export default function Home() {
           
           if (response.ok) {
             const data = await response.json();
-            const detectedFid = data.fid || 0;
+            detectedFid = data.fid || 0;
             if (detectedFid > 0) {
-              console.log("[home] FID found from connected wallet:", detectedFid);
+              console.log("[home] ✅ FID found from API lookup:", detectedFid);
               setFid(detectedFid);
               if (!devBypass) {
                 setTimeout(() => {
                   router.push("/swipe");
                 }, 500);
               }
+            } else {
+              console.log("[home] ⚠️ FID not found for this address");
             }
           }
         } catch (e) {
-          console.warn("[home] Failed to lookup FID from connected wallet:", e);
+          console.warn("[home] Failed to get FID from wallet:", e);
         }
       };
       
-      lookupFidFromAddress();
+      getFidFromContext();
     }
   }, [isConnected, address, fid, router, devBypass]);
 
@@ -129,15 +153,29 @@ export default function Home() {
       // Wait a bit for connection to complete
       await new Promise(resolve => setTimeout(resolve, 1500));
       
-      // After wallet connected, try to get FID
-      // First, try Farcaster context (might be available after wallet connect)
+      // After wallet connected, try to get FID from Farcaster context first
+      // Base App's smart wallet is integrated with Farcaster, so context should be available
+      console.log("[home] Wallet connected, checking Farcaster context...");
+      await initializeFarcasterSDK();
+      await new Promise(resolve => setTimeout(resolve, 300)); // Give SDK time to initialize
+      
       const ctx = await getFarcasterContext();
       let detectedFid = ctx?.fid || 0;
       
-      // If FID not found from context, try lookup from wallet address
-      if (detectedFid === 0 && address) {
+      if (detectedFid > 0) {
+        console.log("[home] ✅ FID found from Farcaster context:", detectedFid);
+        setLoading(false);
+        setFid(detectedFid);
+        setTimeout(() => {
+          router.push("/swipe");
+        }, 500);
+        return;
+      }
+      
+      // Fallback: If Farcaster context not available, try API lookup from address
+      if (address) {
         try {
-          console.log("[home] Looking up FID from address:", address);
+          console.log("[home] Farcaster context not available, trying API lookup...");
           const response = await fetch("/api/lookup-fid", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -147,7 +185,15 @@ export default function Home() {
           if (response.ok) {
             const data = await response.json();
             detectedFid = data.fid || 0;
-            console.log("[home] FID found from address:", detectedFid);
+            if (detectedFid > 0) {
+              console.log("[home] ✅ FID found from API lookup:", detectedFid);
+              setLoading(false);
+              setFid(detectedFid);
+              setTimeout(() => {
+                router.push("/swipe");
+              }, 500);
+              return;
+            }
           }
         } catch (e) {
           console.warn("[home] Failed to lookup FID from address:", e);
@@ -155,15 +201,7 @@ export default function Home() {
       }
       
       setLoading(false);
-      
-      if (detectedFid > 0) {
-        setFid(detectedFid);
-        setTimeout(() => {
-          router.push("/swipe");
-        }, 500);
-      } else {
-        setRetryCount((prev) => prev + 1);
-      }
+      setRetryCount((prev) => prev + 1);
     } catch (e) {
       console.error("[home] Connect failed:", e);
       setLoading(false);
