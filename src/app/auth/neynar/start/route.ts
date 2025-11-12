@@ -25,6 +25,9 @@ export async function GET() {
     process.env.NEYNAR_AUTHORIZE_URL ||
     "https://app.neynar.com/oauth/authorize";
 
+  // Try to get FID from query params (passed from client)
+  const fid = req.nextUrl.searchParams.get("fid") || "";
+
   const url = new URL(authorizeUrl);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("client_id", clientId);
@@ -32,7 +35,8 @@ export async function GET() {
   url.searchParams.set("code_challenge", challenge);
   url.searchParams.set("code_challenge_method", "S256");
   url.searchParams.set("scope", "openid offline_access fc:write");
-  url.searchParams.set("state", "siwn");
+  // Include FID in state so we can retrieve it in callback
+  url.searchParams.set("state", fid ? `siwn:fid:${fid}` : "siwn");
 
   const res = NextResponse.redirect(url.toString(), { status: 302 });
   res.cookies.set("siwn_verifier", verifier, {

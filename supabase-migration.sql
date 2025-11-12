@@ -48,3 +48,18 @@ CREATE TABLE IF NOT EXISTS "FollowCached" (
 -- Create index on FollowCached
 CREATE INDEX IF NOT EXISTS "FollowCached_fromFid_toFid_idx" ON "FollowCached"("fromFid", "toFid");
 
+-- Create Signer table (for SIWN integration)
+CREATE TABLE IF NOT EXISTS "Signer" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "fid" INTEGER NOT NULL UNIQUE,
+    "signerUuid" TEXT NOT NULL UNIQUE,
+    "publicKey" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'active',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "expiresAt" TIMESTAMP(3)
+);
+
+-- Create index on Signer
+CREATE INDEX IF NOT EXISTS "Signer_fid_idx" ON "Signer"("fid");
+

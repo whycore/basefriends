@@ -38,6 +38,53 @@ function setCachedCandidates(key: string, data: any): void {
   }
 }
 
+/**
+ * Calculate match score based on user preferences and candidate profile
+ */
+function calculateMatchScore(
+  candidate: { bio?: string; username?: string; displayName?: string },
+  userPreferences: { interests?: string; skills?: string }
+): number {
+  let score = 0;
+  const candidateText = [
+    candidate.bio || "",
+    candidate.username || "",
+    candidate.displayName || "",
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  // Match interests (weight: 2 points per match)
+  if (userPreferences.interests) {
+    const interests = userPreferences.interests
+      .split(",")
+      .map((i) => i.trim().toLowerCase())
+      .filter((i) => i.length > 0);
+    
+    for (const interest of interests) {
+      if (candidateText.includes(interest)) {
+        score += 2;
+      }
+    }
+  }
+
+  // Match skills (weight: 3 points per match - skills are more specific)
+  if (userPreferences.skills) {
+    const skills = userPreferences.skills
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter((s) => s.length > 0);
+    
+    for (const skill of skills) {
+      if (candidateText.includes(skill)) {
+        score += 3;
+      }
+    }
+  }
+
+  return score;
+}
+
 function mockCandidates() {
   return [
     {
@@ -107,18 +154,38 @@ export async function GET(req: NextRequest) {
     const dbUrl = process.env.DATABASE_URL || "";
     const isPostgres = dbUrl.startsWith("postgres://") || dbUrl.startsWith("postgresql://");
 
-    // Get already swiped FIDs from database (if viewerFid provided and Postgres available)
+    // Get already swiped FIDs and user preferences from database (if viewerFid provided and Postgres available)
     let swipedFids: number[] = [];
+    let userPreferences: { interests?: string; skills?: string } = {};
+    
     if (isPostgres && viewerFid > 0) {
       try {
+        // Get swiped users
         const swiped = await prisma.swipe.findMany({
           where: { fromFid: viewerFid },
           select: { toFid: true },
         });
         swipedFids = swiped.map((s) => s.toFid);
         console.log("[candidates] Found", swipedFids.length, "already swiped users for FID", viewerFid);
+        
+        // Get user preferences for matching
+        const userExtra = await prisma.userExtra.findUnique({
+          where: { fid: viewerFid },
+          select: { interests: true, skills: true },
+        });
+        
+        if (userExtra) {
+          userPreferences = {
+            interests: userExtra.interests || undefined,
+            skills: userExtra.skills || undefined,
+          };
+          console.log("[candidates] User preferences loaded:", {
+            hasInterests: !!userPreferences.interests,
+            hasSkills: !!userPreferences.skills,
+          });
+        }
       } catch (dbError: any) {
-        console.warn("[candidates] Failed to fetch swiped users:", dbError?.message);
+        console.warn("[candidates] Failed to fetch user data:", dbError?.message);
       }
     }
 
@@ -215,7 +282,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const candidates =
+    let candidates =
       resp.users?.map((u: any) => ({
         fid: u.fid,
         username: u.username,
@@ -225,6 +292,39 @@ export async function GET(req: NextRequest) {
         followingCount: u.following_count,
         bio: u.profile?.bio?.text,
       })) ?? [];
+
+    // Apply preference matching and scoring if user has preferences
+    if (userPreferences.interests || userPreferences.skills) {
+      // Calculate max possible score for normalization
+      const maxPossibleScore = 
+        (userPreferences.interests?.split(",").filter(i => i.trim().length > 0).length || 0) * 2 +
+        (userPreferences.skills?.split(",").filter(s => s.trim().length > 0).length || 0) * 3;
+      
+      candidates = candidates.map((candidate) => {
+        const rawScore = calculateMatchScore(candidate, userPreferences);
+        // Normalize to percentage (0-100) for display
+        const matchScore = maxPossibleScore > 0 
+          ? Math.round((rawScore / maxPossibleScore) * 100)
+          : 0;
+        return {
+          ...candidate,
+          matchScore, // Normalized percentage score
+          rawMatchScore: rawScore, // Keep raw score for sorting
+        };
+      });
+
+      // Sort by raw match score (highest first), then by follower count
+      candidates.sort((a: any, b: any) => {
+        if (a.rawMatchScore !== b.rawMatchScore) {
+          return (b.rawMatchScore || 0) - (a.rawMatchScore || 0);
+        }
+        return (b.followerCount || 0) - (a.followerCount || 0);
+      });
+
+      console.log("[candidates] Sorted candidates by match score. Top matches:", 
+        candidates.slice(0, 3).map((c: any) => ({ fid: c.fid, score: c.matchScore, raw: c.rawMatchScore }))
+      );
+    }
 
     const result = { candidates };
     

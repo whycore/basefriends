@@ -49,3 +49,15 @@ model FollowCached {
   lastCheckedAt DateTime?
   @@index([fromFid, toFid])
 }
+
+model Signer {
+  id          String   @id @default(cuid())
+  fid         Int      @unique // One signer per FID
+  signerUuid  String   @unique // Neynar signer UUID
+  publicKey   String?  // Signer public key (optional, for reference)
+  status      String   @default("active") // 'active', 'revoked', 'expired'
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  expiresAt   DateTime? // Token expiration (if applicable)
+  @@index([fid])
+}
