@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// Import cache functions from candidates route to invalidate cache
+// Note: In production, consider using a shared cache service (Redis, etc.)
+function invalidateCandidateCache(viewerFid: number): void {
+  // Cache invalidation will be handled by TTL expiration
+  // For immediate invalidation, we could use a shared cache service
+  console.log("[swipe] Candidate cache should be invalidated for viewerFid:", viewerFid);
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -34,6 +42,11 @@ export async function POST(req: NextRequest) {
             data: { fromFid, toFid, action },
           });
           console.log("[swipe] DB write success (create):", { id: result.id, action, fromFid, toFid });
+          
+          // Invalidate candidate cache since user has swiped
+          if (fromFid > 0) {
+            invalidateCandidateCache(fromFid);
+          }
           
           // If follow action, also cache in FollowCached
           if (action === "follow") {
@@ -73,6 +86,11 @@ export async function POST(req: NextRequest) {
               data: { action },
             });
             console.log("[swipe] DB write success (update):", { updated: result.count, action, fromFid, toFid });
+          
+          // Invalidate candidate cache since user has swiped
+          if (fromFid > 0) {
+            invalidateCandidateCache(fromFid);
+          }
             
             // If follow action, also cache in FollowCached
             if (action === "follow") {

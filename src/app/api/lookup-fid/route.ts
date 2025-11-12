@@ -64,24 +64,69 @@ export async function POST(req: NextRequest) {
           
           // Try lookup by verification address instead (verified wallet address)
           // Some users might have verified this address but it's not their custody address
+          
+          // Method 1: Try SDK method if available
           try {
             if (typeof (client as any).lookupUserByVerification === "function") {
-              console.log("[lookup-fid] Trying lookupUserByVerification...");
+              console.log("[lookup-fid] Trying lookupUserByVerification (SDK)...");
               const verifResponse = await (client as any).lookupUserByVerification(normalizedAddress);
               if (verifResponse?.fid) {
-                console.log("[lookup-fid] ✅ FID found via verification address:", verifResponse.fid);
+                console.log("[lookup-fid] ✅ FID found via verification address (SDK):", verifResponse.fid);
                 return NextResponse.json({
                   fid: verifResponse.fid,
                   username: verifResponse.username,
                   displayName: verifResponse.display_name,
                 });
               }
+            } else {
+              console.log("[lookup-fid] lookupUserByVerification method not available in SDK");
             }
           } catch (verifError: any) {
-            console.log("[lookup-fid] Verification lookup also failed:", verifError?.message);
+            console.log("[lookup-fid] Verification lookup (SDK) failed:", verifError?.message);
           }
           
-          console.log("[lookup-fid] ⚠️ No Farcaster account found for this wallet address");
+          // Method 2: Try direct API call for verification address
+          try {
+            console.log("[lookup-fid] Trying direct API call for verification address...");
+            const apiKey = process.env.NEYNAR_API_KEY;
+            const verifResponse = await fetch(
+              `https://api.neynar.com/v2/farcaster/user/by_verification?address=${normalizedAddress}`,
+              {
+                headers: {
+                  "api_key": apiKey || "",
+                  "accept": "application/json",
+                },
+              }
+            );
+            
+            console.log("[lookup-fid] Verification API response status:", verifResponse.status);
+            
+            if (verifResponse.ok) {
+              const verifData = await verifResponse.json();
+              console.log("[lookup-fid] Verification API response:", JSON.stringify(verifData).substring(0, 300));
+              
+              let user = null;
+              if (verifData.result?.user) user = verifData.result.user;
+              else if (verifData.user) user = verifData.user;
+              else if (verifData.result?.fid) user = verifData.result;
+              
+              if (user?.fid) {
+                console.log("[lookup-fid] ✅ FID found via verification address (API):", user.fid);
+                return NextResponse.json({
+                  fid: user.fid,
+                  username: user.username,
+                  displayName: user.display_name,
+                });
+              }
+            } else {
+              const errorText = await verifResponse.text();
+              console.log("[lookup-fid] Verification API error:", errorText.substring(0, 200));
+            }
+          } catch (verifApiError: any) {
+            console.log("[lookup-fid] Verification API call failed:", verifApiError?.message);
+          }
+          
+          console.log("[lookup-fid] ⚠️ No Farcaster account found for this wallet address after trying all methods");
         }
       } else {
         console.log("[lookup-fid] ⚠️ fetchBulkUsersByEthOrSolAddress method not found, trying alternative...");

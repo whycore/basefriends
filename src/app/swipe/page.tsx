@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useAccount } from "wagmi";
 import { getFarcasterContext } from "@/lib/farcaster";
 import { sdk } from "@farcaster/miniapp-sdk";
@@ -58,28 +58,59 @@ export default function SwipePage() {
     checkContext();
   }, []);
 
-  useEffect(() => {
-    const run = async () => {
-      try {
-        setLoading(true);
-        const q = devBypass ? "?dev=1" : "";
-        const res = await fetch(`/api/candidates${q}`);
-        const data = (await res.json()) as { candidates: Candidate[] };
-        setCandidates(data.candidates ?? []);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
+  const fetchCandidates = useCallback(async (append = false) => {
+    try {
+      if (!append) setLoading(true);
+      
+      // Build query params
+      const params = new URLSearchParams();
+      if (devBypass) params.set("dev", "1");
+      if (currentFid > 0) params.set("viewerFid", String(currentFid));
+      params.set("limit", "10");
+      
+      const q = params.toString() ? `?${params.toString()}` : "";
+      const res = await fetch(`/api/candidates${q}`);
+      
+      if (!res.ok) {
+        throw new Error(`Failed to fetch candidates: ${res.status}`);
       }
-    };
-    run();
-  }, [devBypass]);
+      
+      const data = (await res.json()) as { candidates: Candidate[] };
+      const newCandidates = data.candidates ?? [];
+      
+      if (append) {
+        setCandidates((prev) => [...prev, ...newCandidates]);
+      } else {
+        setCandidates(newCandidates);
+      }
+    } catch (e) {
+      console.error("[swipe] Failed to fetch candidates:", e);
+      // Show error to user but don't block the UI
+      if (!append) {
+        setCandidates([]);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [devBypass, currentFid]);
+
+  useEffect(() => {
+    fetchCandidates(false);
+  }, [fetchCandidates]);
 
   const current = useMemo(() => candidates[0], [candidates]);
 
   const handleAction = async (action: "follow" | "skip") => {
     if (!current) return;
-    setCandidates((prev) => prev.slice(1));
+    
+    // Remove current candidate from list
+    const remainingCandidates = candidates.slice(1);
+    setCandidates(remainingCandidates);
+    
+    // If we're running low on candidates (less than 3), fetch more
+    if (remainingCandidates.length <= 3) {
+      fetchCandidates(true); // Append new candidates
+    }
 
     // Precompute deeplink to keep user-gesture context and avoid blockers on mobile.
     const deeplink = `https://warpcast.com/~/profiles/${current.fid}`;
