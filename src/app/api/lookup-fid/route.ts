@@ -27,12 +27,17 @@ export async function POST(req: NextRequest) {
     const client = getNeynarClient();
     
     // Lookup user by address using Neynar API
-    // Neynar supports lookupUserByVerification with address
+    // Use fetchBulkUsers with verifications parameter (addresses)
+    const normalizedAddress = address.toLowerCase();
+    
     try {
-      // Try using lookupUserByVerification (standard method for address lookup)
-      const user = await client.lookupUserByVerification(address);
+      // Try using fetchBulkUsers with verifications parameter
+      const resp = await client.fetchBulkUsers({
+        verifications: [normalizedAddress],
+      });
       
-      if (user && user.fid) {
+      if (resp.users && resp.users.length > 0) {
+        const user = resp.users[0];
         return NextResponse.json({
           fid: user.fid,
           username: user.username,
@@ -40,43 +45,33 @@ export async function POST(req: NextRequest) {
         });
       }
     } catch (e: any) {
-      console.log("[lookup-fid] lookupUserByVerification failed, trying fetchBulkUsers:", e?.message);
+      console.log("[lookup-fid] fetchBulkUsers with verifications failed, trying alternative:", e?.message);
       
-      // Fallback: try using fetchBulkUsers with addresses parameter
+      // Fallback: try direct HTTP call to Neynar API
       try {
-        const resp = await client.fetchBulkUsers({
-          addresses: [address.toLowerCase()], // Ensure lowercase
-        });
+        const apiKey = process.env.NEYNAR_API_KEY;
+        const response = await fetch(
+          `https://api.neynar.com/v2/farcaster/user/by_verification?verification=${normalizedAddress}`,
+          {
+            headers: {
+              "api_key": apiKey || "",
+            },
+          }
+        );
         
-        if (resp.users && resp.users.length > 0) {
-          const user = resp.users[0];
-          return NextResponse.json({
-            fid: user.fid,
-            username: user.username,
-            displayName: user.display_name,
-          });
-        }
-      } catch (e2: any) {
-        console.error("[lookup-fid] fetchBulkUsers also failed:", e2?.message);
-        
-        // Last resort: try with viewerFid
-        try {
-          const resp = await client.fetchBulkUsers({
-            addresses: [address.toLowerCase()],
-            viewerFid: 1, // Use a valid FID
-          });
-          
-          if (resp.users && resp.users.length > 0) {
-            const user = resp.users[0];
+        if (response.ok) {
+          const data = await response.json();
+          if (data.result && data.result.user) {
+            const user = data.result.user;
             return NextResponse.json({
               fid: user.fid,
               username: user.username,
               displayName: user.display_name,
             });
           }
-        } catch (e3: any) {
-          console.error("[lookup-fid] All methods failed:", e3?.message);
         }
+      } catch (e2: any) {
+        console.error("[lookup-fid] Direct API call also failed:", e2?.message);
       }
     }
 
