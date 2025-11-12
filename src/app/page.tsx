@@ -148,6 +148,7 @@ export default function Home() {
               } else if (isMounted) {
                 clearTimeout(timeoutId);
                 console.log("[home] ⚠️ FID not found for this address in API response");
+                // Allow user to continue without FID (use wallet address as identifier)
                 setRetryCount((prev) => prev + 1);
               }
             } else {
@@ -156,6 +157,13 @@ export default function Home() {
                 status: response.status,
                 error: errorData,
               });
+              
+              // Log error for debugging
+              if (response.status === 404) {
+                console.log("[home] ⚠️ FID not found for this wallet address.");
+                console.log("[home] 💡 Suggestion: Make sure wallet is connected to Farcaster account, or use Farcaster context from Base App.");
+              }
+              
               if (isMounted) {
                 clearTimeout(timeoutId);
                 setRetryCount((prev) => prev + 1);
@@ -347,9 +355,19 @@ export default function Home() {
                         Looking up your Farcaster account...
                       </p>
                       {retryCount > 0 && (
-                        <p className="text-xs text-orange-600">
-                          ⚠️ FID not found. Make sure your wallet is connected to a Farcaster account.
-                        </p>
+                        <div className="mt-2 space-y-2">
+                          <p className="text-xs text-orange-600">
+                            ⚠️ FID not found. This might be because:
+                          </p>
+                          <ul className="text-xs text-gray-600 list-disc list-inside space-y-1 ml-2">
+                            <li>Wallet is not connected to a Farcaster account</li>
+                            <li>Farcaster context is not available in this environment</li>
+                            <li>No Farcaster account found for this wallet address</li>
+                          </ul>
+                          <p className="text-xs text-blue-600 mt-2">
+                            💡 Tip: Open this app in Base App for automatic FID detection, or continue with wallet address.
+                          </p>
+                        </div>
                       )}
                     </div>
                   )}
