@@ -14,6 +14,14 @@ export async function POST(req: NextRequest) {
     
     if (isPostgres) {
       try {
+        // Ensure User exists first (foreign key constraint)
+        await prisma.user.upsert({
+          where: { fid: 0 },
+          update: {},
+          create: { fid: 0 },
+        });
+        
+        // Then upsert UserExtra
         const result = await prisma.userExtra.upsert({
           create: { fid: 0, headline, interests, skills },
           update: { headline, interests, skills },

@@ -21,6 +21,15 @@ export async function POST(req: NextRequest) {
     
     if (isPostgres) {
       try {
+        // Ensure User exists for fromFid (if needed for future foreign keys)
+        await prisma.user.upsert({
+          where: { fid: fromFid },
+          update: {},
+          create: { fid: fromFid },
+        }).catch(() => {
+          // Ignore if user already exists
+        });
+        
         const result = await prisma.swipe.create({
           data: { fromFid, toFid, action },
         });
