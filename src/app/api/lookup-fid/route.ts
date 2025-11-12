@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getNeynarClient } from "@/lib/neynar";
 
 /**
  * Lookup Farcaster FID from wallet address
@@ -24,54 +23,73 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const client = getNeynarClient();
-    
     // Lookup user by address using Neynar API
-    // Use fetchBulkUsers with verifications parameter (addresses)
+    // Use direct HTTP call since fetchBulkUsers doesn't support address lookup
     const normalizedAddress = address.toLowerCase();
+    const apiKey = process.env.NEYNAR_API_KEY;
     
     try {
-      // Try using fetchBulkUsers with verifications parameter
-      const resp = await client.fetchBulkUsers({
-        verifications: [normalizedAddress],
-      });
+      // Try Neynar API v2 endpoint for user lookup by verification address
+      const response = await fetch(
+        `https://api.neynar.com/v2/farcaster/user/by_verification?verification=${normalizedAddress}`,
+        {
+          headers: {
+            "api_key": apiKey || "",
+            "accept": "application/json",
+          },
+        }
+      );
       
-      if (resp.users && resp.users.length > 0) {
-        const user = resp.users[0];
-        return NextResponse.json({
-          fid: user.fid,
-          username: user.username,
-          displayName: user.display_name,
-        });
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Handle different response formats
+        let user = null;
+        if (data.result && data.result.user) {
+          user = data.result.user;
+        } else if (data.user) {
+          user = data.user;
+        }
+        
+        if (user && user.fid) {
+          return NextResponse.json({
+            fid: user.fid,
+            username: user.username,
+            displayName: user.display_name,
+          });
+        }
+      } else {
+        console.log("[lookup-fid] API returned status:", response.status);
+        const errorText = await response.text();
+        console.log("[lookup-fid] Error response:", errorText);
       }
     } catch (e: any) {
-      console.log("[lookup-fid] fetchBulkUsers with verifications failed, trying alternative:", e?.message);
+      console.error("[lookup-fid] API call failed:", e?.message);
       
-      // Fallback: try direct HTTP call to Neynar API
+      // Fallback: try alternative endpoint format
       try {
-        const apiKey = process.env.NEYNAR_API_KEY;
         const response = await fetch(
-          `https://api.neynar.com/v2/farcaster/user/by_verification?verification=${normalizedAddress}`,
+          `https://api.neynar.com/v1/farcaster/user/by_verification?address=${normalizedAddress}`,
           {
             headers: {
               "api_key": apiKey || "",
+              "accept": "application/json",
             },
           }
         );
         
         if (response.ok) {
           const data = await response.json();
-          if (data.result && data.result.user) {
-            const user = data.result.user;
+          if (data.result && data.result.fid) {
             return NextResponse.json({
-              fid: user.fid,
-              username: user.username,
-              displayName: user.display_name,
+              fid: data.result.fid,
+              username: data.result.username,
+              displayName: data.result.display_name,
             });
           }
         }
       } catch (e2: any) {
-        console.error("[lookup-fid] Direct API call also failed:", e2?.message);
+        console.error("[lookup-fid] Alternative endpoint also failed:", e2?.message);
       }
     }
 
