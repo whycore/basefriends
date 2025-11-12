@@ -17,14 +17,20 @@ export async function POST(req: NextRequest) {
     // Enable write only when using Postgres (Supabase/Neon). Skip for file-based sqlite on serverless.
     const dbUrl = process.env.DATABASE_URL || "";
     const isPostgres = dbUrl.startsWith("postgres://") || dbUrl.startsWith("postgresql://");
+    console.log("[swipe] DB URL check:", { isPostgres, dbUrlPrefix: dbUrl.substring(0, 20) + "..." });
+    
     if (isPostgres) {
       try {
-        await prisma.swipe.create({
+        const result = await prisma.swipe.create({
           data: { fromFid, toFid, action },
         });
-      } catch (e) {
-        console.warn("DB write failed:", e);
+        console.log("[swipe] DB write success:", result.id);
+      } catch (e: any) {
+        console.error("[swipe] DB write failed:", e?.message || e);
+        // Don't fail the request, but log the error
       }
+    } else {
+      console.log("[swipe] Skipping DB write (not Postgres)");
     }
 
     // Follow action Path B fallback can return a deeplink for the client to open.

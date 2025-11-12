@@ -10,16 +10,22 @@ export async function POST(req: NextRequest) {
 
     const dbUrl = process.env.DATABASE_URL || "";
     const isPostgres = dbUrl.startsWith("postgres://") || dbUrl.startsWith("postgresql://");
+    console.log("[onboarding] DB URL check:", { isPostgres, dbUrlPrefix: dbUrl.substring(0, 20) + "..." });
+    
     if (isPostgres) {
       try {
-        await prisma.userExtra.upsert({
+        const result = await prisma.userExtra.upsert({
           create: { fid: 0, headline, interests, skills },
           update: { headline, interests, skills },
           where: { fid: 0 },
         });
-      } catch (e) {
-        console.warn("DB write failed:", e);
+        console.log("[onboarding] DB write success:", result.fid);
+      } catch (e: any) {
+        console.error("[onboarding] DB write failed:", e?.message || e);
+        // Don't fail the request, but log the error
       }
+    } else {
+      console.log("[onboarding] Skipping DB write (not Postgres)");
     }
 
     return NextResponse.json({ ok: true });
