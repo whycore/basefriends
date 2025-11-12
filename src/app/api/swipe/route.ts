@@ -5,14 +5,12 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const toFid = Number(body?.toFid);
+    const fromFid = Number(body?.fromFid) || 0; // Use provided fid or default to 0
     const action = body?.action === "follow" ? "follow" : "skip";
 
     if (!toFid) {
       return NextResponse.json({ error: "invalid_toFid" }, { status: 400 });
     }
-
-    // For PoC, we don't have auth middleware; assume fromFid=0 (unknown)
-    const fromFid = 0;
 
     // Enable write only when using Postgres (Supabase/Neon). Skip for file-based sqlite on serverless.
     const dbUrl = process.env.DATABASE_URL || "";
@@ -35,7 +33,38 @@ export async function POST(req: NextRequest) {
           const result = await prisma.swipe.create({
             data: { fromFid, toFid, action },
           });
-          console.log("[swipe] DB write success (create):", { id: result.id, action, toFid });
+          console.log("[swipe] DB write success (create):", { id: result.id, action, fromFid, toFid });
+          
+          // If follow action, also cache in FollowCached
+          if (action === "follow") {
+            // Check if already exists, then upsert
+            const existing = await prisma.followCached.findFirst({
+              where: { fromFid, toFid },
+            }).catch(() => null);
+            
+            if (existing) {
+              await prisma.followCached.update({
+                where: { id: existing.id },
+                data: {
+                  status: "attempted",
+                  lastCheckedAt: new Date(),
+                },
+              }).catch((e) => {
+                console.log("[swipe] FollowCached update (non-fatal):", e?.message);
+              });
+            } else {
+              await prisma.followCached.create({
+                data: {
+                  fromFid,
+                  toFid,
+                  status: "attempted",
+                  lastCheckedAt: new Date(),
+                },
+              }).catch((e) => {
+                console.log("[swipe] FollowCached create (non-fatal):", e?.message);
+              });
+            }
+          }
         } catch (createError: any) {
           // If duplicate (unique constraint), update instead
           if (createError?.code === "P2002" || createError?.message?.includes("Unique constraint")) {
@@ -43,7 +72,38 @@ export async function POST(req: NextRequest) {
               where: { fromFid, toFid },
               data: { action },
             });
-            console.log("[swipe] DB write success (update):", { updated: result.count, action, toFid });
+            console.log("[swipe] DB write success (update):", { updated: result.count, action, fromFid, toFid });
+            
+            // If follow action, also cache in FollowCached
+            if (action === "follow") {
+              // Check if already exists, then upsert
+              const existing = await prisma.followCached.findFirst({
+                where: { fromFid, toFid },
+              }).catch(() => null);
+              
+              if (existing) {
+                await prisma.followCached.update({
+                  where: { id: existing.id },
+                  data: {
+                    status: "attempted",
+                    lastCheckedAt: new Date(),
+                  },
+                }).catch((e) => {
+                  console.log("[swipe] FollowCached update (non-fatal):", e?.message);
+                });
+              } else {
+                await prisma.followCached.create({
+                  data: {
+                    fromFid,
+                    toFid,
+                    status: "attempted",
+                    lastCheckedAt: new Date(),
+                  },
+                }).catch((e) => {
+                  console.log("[swipe] FollowCached create (non-fatal):", e?.message);
+                });
+              }
+            }
           } else {
             throw createError; // Re-throw if it's a different error
           }

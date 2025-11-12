@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    const fid = Number(body?.fid) || 0; // Use provided fid or default to 0
     const headline = typeof body?.headline === "string" ? body.headline : "";
     const interests = typeof body?.interests === "string" ? body.interests : "";
     const skills = typeof body?.skills === "string" ? body.skills : "";
@@ -22,17 +23,17 @@ export async function POST(req: NextRequest) {
       try {
         // Ensure User exists first (foreign key constraint)
         await prisma.user.upsert({
-          where: { fid: 0 },
+          where: { fid },
           update: {},
-          create: { fid: 0 },
+          create: { fid },
         });
-        console.log("[onboarding] User upsert success");
+        console.log("[onboarding] User upsert success:", fid);
         
         // Then upsert UserExtra
         const result = await prisma.userExtra.upsert({
-          create: { fid: 0, headline, interests, skills },
+          create: { fid, headline, interests, skills },
           update: { headline, interests, skills },
-          where: { fid: 0 },
+          where: { fid },
         });
         console.log("[onboarding] DB write success:", { fid: result.fid, headline: result.headline?.substring(0, 20) });
       } catch (e: any) {

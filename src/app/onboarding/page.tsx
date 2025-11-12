@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getFarcasterContext } from "@/lib/farcaster";
 
 export default function OnboardingPage() {
   const [headline, setHeadline] = useState("");
@@ -8,6 +9,19 @@ export default function OnboardingPage() {
   const [skills, setSkills] = useState("");
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
+  const [currentFid, setCurrentFid] = useState<number>(0);
+
+  useEffect(() => {
+    const checkContext = async () => {
+      try {
+        const ctx = await getFarcasterContext();
+        setCurrentFid(ctx?.fid || 0);
+      } catch {
+        setCurrentFid(0);
+      }
+    };
+    checkContext();
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -16,7 +30,7 @@ export default function OnboardingPage() {
       await fetch("/api/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ headline, interests, skills }),
+        body: JSON.stringify({ fid: currentFid, headline, interests, skills }),
       });
       setDone(true);
     } catch (e) {

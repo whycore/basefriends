@@ -22,6 +22,7 @@ export default function SwipePage() {
   const [hasFarcaster, setHasFarcaster] = useState<boolean>(false);
   const [devBypass, setDevBypass] = useState<boolean>(false);
   const [siwnConnected, setSiwnConnected] = useState<boolean>(false);
+  const [currentFid, setCurrentFid] = useState<number>(0);
   const enableSiwn =
     typeof process !== "undefined" &&
     (process.env.NEXT_PUBLIC_ENABLE_SIWN || "").toLowerCase() === "true";
@@ -43,9 +44,12 @@ export default function SwipePage() {
     const checkContext = async () => {
       try {
         const ctx = await getFarcasterContext();
-        setHasFarcaster(!!ctx?.fid && ctx.fid > 0);
+        const fid = ctx?.fid || 0;
+        setHasFarcaster(fid > 0);
+        setCurrentFid(fid);
       } catch {
         setHasFarcaster(false);
+        setCurrentFid(0);
       }
     };
     checkContext();
@@ -101,7 +105,7 @@ export default function SwipePage() {
           try {
             if ("sendBeacon" in navigator) {
               const blob = new Blob(
-                [JSON.stringify({ toFid: current.fid, action })],
+                [JSON.stringify({ fromFid: currentFid, toFid: current.fid, action })],
                 { type: "application/json" },
               );
               // @ts-ignore
@@ -110,7 +114,7 @@ export default function SwipePage() {
               fetch("/api/swipe", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ toFid: current.fid, action }),
+                body: JSON.stringify({ fromFid: currentFid, toFid: current.fid, action }),
                 keepalive: true,
               }).catch(() => {});
             }
@@ -133,7 +137,7 @@ export default function SwipePage() {
       try {
         if ("sendBeacon" in navigator) {
           const blob = new Blob(
-            [JSON.stringify({ toFid: current.fid, action })],
+            [JSON.stringify({ fromFid: currentFid, toFid: current.fid, action })],
             { type: "application/json" },
           );
           // @ts-ignore
@@ -142,7 +146,7 @@ export default function SwipePage() {
           fetch("/api/swipe", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ toFid: current.fid, action }),
+            body: JSON.stringify({ fromFid: currentFid, toFid: current.fid, action }),
             keepalive: true,
           }).catch(() => {});
         }
@@ -155,7 +159,7 @@ export default function SwipePage() {
       await fetch("/api/swipe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ toFid: current.fid, action }),
+        body: JSON.stringify({ fromFid: currentFid, toFid: current.fid, action }),
       });
     } catch (e) {
       console.error(e);
